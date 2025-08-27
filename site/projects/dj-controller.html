@@ -21,8 +21,8 @@
     <a href="#troubleshooting">Troubleshooting</a> •
     <a href="#upgrades">Upgrades</a>
   </nav>
-  <p><b>Goal:</b> Build a professional-feeling, USB-MIDI DJ controller at home: dual jogs, crossfader + line faders, 3-band EQ per deck, transport, browse encoder, 8 performance pads/side with RGB, OLED status — and rock-solid low-latency firmware that maps to Traktor, Rekordbox (MIDI mode), VirtualDJ, Ableton, etc.</p>
-  <p><b>Platform:</b> Teensy 4.1 (USB-MIDI device). Audio mixing is done in your DJ software; this controller sends MIDI and shows feedback. (Optional: add Teensy Audio Shield if you want onboard audio I/O/monitoring/FX.)</p>
+  <p><b>Goal:</b> Build a professional-feeling, USB-MIDI DJ controller at home: dual jogs, crossfader + line faders, 3-band EQ per deck, transport controls, browse encoder, 8 performance pads/side with RGB feedback, small OLED display — and rock-solid low-latency firmware that maps to Traktor, Rekordbox (MIDI mode), VirtualDJ, Ableton, etc.</p>
+  <p><b>Platform:</b> Teensy 4.1 (as a USB-MIDI device). All audio mixing is done in your DJ software; this DIY controller sends MIDI signals and shows feedback from the software. (Optional: add a Teensy Audio Shield if you want onboard audio I/O or effects.)</p>
 </header>
 
 <hr>
@@ -35,37 +35,39 @@
   ├─ 6× EQ pots (Hi/Mid/Low per deck) + 2× gains
   ├─ Transport buttons (Play, Cue, Sync), Shift
   ├─ Browse encoder + push, Load A/B
-  └─ RGB pads (2×8), per-pad color feedback
+  └─ RGB pads (2×8) with per-pad color feedback
 
 → [Teensy 4.1 Scan & Process]
   ├─ ADC read (pots/faders) → EMA smoothing → 14-bit scaling
-  ├─ Encoders (ISR or fast poll) + acceleration
-  ├─ Button matrix (via MCP23017) → debounce + hold/double-tap
-  ├─ Jog engine: relative deltas + touch gate (scratch vs nudge)
-  ├─ LED engine: WS2812 via FastLED (non-blocking)
-  └─ State → USB-MIDI events (Notes/CC/14-bit CC/Pitch Bend)
+  ├─ Encoders (ISR or fast poll) → relative steps + acceleration
+  ├─ Button matrix (via MCP23017) → debounce + hold/double-tap detect
+  ├─ Jog engine: accumulate quadrature deltas + touch gate (scratch vs nudge mode)
+  ├─ LED engine: WS2812 (NeoPixel) via FastLED (non-blocking refresh)
+  └─ State → USB-MIDI events (Notes/CCs/14-bit CCs/Pitch Bend)
 
 → [Host DJ Software]
-  ├─ Learn/map controls (Traktor/Rekordbox/VDJ/Ableton)
-  └─ Send MIDI feedback → pad colors, indicators (optional)
+  ├─ “MIDI learn” map controls (Traktor/Rekordbox/VDJ/Ableton/etc.)
+  └─ Send MIDI feedback → pad colors, indicators, text (optional)
 
 [Power]
-  └─ USB 5 V (PC). Add external 5 V if many LEDs; always common ground.</code></pre>
+  └─ USB 5 V (from PC). If using many LEDs or motors, add external 5 V supply (must share common ground).</code></pre>
+  <p>This flow shows how your inputs are scanned by the Teensy, processed into MIDI messages, and sent to the DJ software. The Teensy reads all the knobs, faders, buttons, and jog wheels, then sends standard MIDI signals (note on/off, CC, etc.) over USB to control the software. The DJ software handles all audio mixing and can optionally send MIDI back to the controller (e.g., to change pad LED colors or update the OLED display). The whole system is powered by USB 5 V from the computer (if you add an external 5 V source for lots of LEDs, always tie grounds together).</p>
 
   <h3>1.1 Why Build Your Own?</h3>
   <ul>
-    <li><b>Freedom:</b> Layout, feel, and visual identity are yours.</li>
-    <li><b>Learning:</b> Understand electronics, firmware, USB-MIDI, and pro UX.</li>
-    <li><b>Serviceability:</b> Everything is repairable and hackable.</li>
-    <li><b>Art:</b> Make it a sculpture: wood, acrylic, resin, metal.</li>
+    <li><b>Freedom:</b> Layout, feel, and visual identity are yours to define.</li>
+    <li><b>Learning:</b> Build skills in electronics, coding firmware, USB-MIDI, and UX design for performance.</li>
+    <li><b>Serviceability:</b> Every part is repairable or replaceable — no more “sealed box” gear.</li>
+    <li><b>Art:</b> Treat it as an art project: use wood, acrylic, resin, metal, or any materials for a unique look.</li>
+    <li><b>Customization:</b> Tailor the controller to your exact workflow and preferences. (It’s not necessarily cheaper than buying a controller — DIY can cost about the same as an entry-level unit:contentReference[oaicite:0]{index=0} — but the result is priceless because it’s exactly what *you* want.)</li>
   </ul>
 
   <h3>1.2 Performance Targets</h3>
   <ul>
-    <li>Total input→MIDI latency: <b>&lt; 5 ms</b> typical.</li>
-    <li>Jog resolution: <b>≥ 600 PPR encoder</b> (gives smooth scratch/nudge).</li>
-    <li>Analog stability: jitter &lt; 1 LSB after smoothing; full 14-bit transmission.</li>
-    <li>USB stability: no drops after 60+ minutes continuous use.</li>
+    <li>Total input→MIDI latency: <b>&lt; 5 ms</b> typical (imperceptible).</li>
+    <li>Jog resolution: <b>≥ 600 PPR</b> (pulses per revolution) on the encoder for smooth scratching and fine nudging.</li>
+    <li>Analog stability: jitter &lt; 1 LSB after smoothing; send full 14-bit resolution for faders and pots.</li>
+    <li>USB reliability: no MIDI dropouts or hangs even after 60+ minutes of continuous use.</li>
   </ul>
 </section>
 
@@ -73,78 +75,83 @@
 
 <section id="bom">
   <h2>2) Bill of Materials (BOM)</h2>
-  <p><i>Quantities for a full two-deck build; start with an MVP if you like.</i></p>
+  <p><i>Quantities assume a full two-deck controller. You can start with one deck or a simpler version as an MVP.</i></p>
   <ul>
     <li><b>Core</b>
       <ul>
-        <li>1× Teensy 4.1 (USB data cable)</li>
-        <li>(Optional) 1× Teensy Audio Shield Rev D/D2 (only if you want onboard audio I/O)</li>
+        <li>1× <a href="https://shop.pimoroni.com/products/teensy-4-1" target="_blank">Teensy 4.1 microcontroller</a> (plus USB cable for power/data)</li>
+        <li>(Optional) 1× Teensy Audio Shield Rev D/D2 (<a href="https://www.adafruit.com/product/4384" target="_blank">PJRC audio adapter board</a>) – only if you want onboard audio I/O or effects</li>
       </ul>
     </li>
     <li><b>Jog Section (per deck)</b>
       <ul>
-        <li>1× High-resolution quadrature encoder (≥600 PPR) <i>or</i> optical wheel+sensor</li>
-        <li>1× Platter: 120–150 mm disc (aluminum/acrylic/3D-print), center hub, bearing/shaft</li>
-        <li>1× Touch sensor: TTP223/AT42QT module <i>or</i> Teensy <code>touchRead()</code> pin to a metalized ring/platter</li>
-        <li>Felt/nylon friction washer(s) for “vinyl” feel</li>
+        <li>1× High-resolution quadrature encoder (≥600 PPR). Example: industrial optical encoder (Omron/Sick) for top quality (but these can cost £150–£200:contentReference[oaicite:1]{index=1}); or a lower-cost 600 PPR encoder module from Amazon/Alibaba (~£30–£50) which also works.</li>
+        <li>1× Platter assembly: 120–150 mm diameter disc (aluminum, acrylic, or 3D-printed) with a central hub and bearing + shaft. (E.g., use a skateboard bearing for smooth rotation and a metal/plastic hub that attaches to the encoder.) Include a felt/nylon slip washer to emulate the slight friction of vinyl.</li>
+        <li>1× Touch sensor for the jog: either a TTP223/AT42QT capacitive touch module (wired to the platter or a metal ring on it) or use a Teensy capacitive <code>touchRead()</code> pin with a homemade touch plate. (The sensor detects when your hand is touching the platter.)</li>
       </ul>
     </li>
-    <li><b>Faders & Pots</b>
+    <li><b>Faders &amp; Pots</b>
       <ul>
-        <li>1× Crossfader 45–60 mm (B10k linear; curve in software). Pro: Mini-Innofader (analog output)</li>
-        <li>2× Line faders 45–60 mm (B10k)</li>
-        <li>8× B10k rotary pots (2 gains + 6 EQ)</li>
-        <li>Knob caps for all pots/faders</li>
+        <li>1× Crossfader, 45–60 mm travel (10 kΩ linear taper). A basic slide potentiometer works (we can apply a software curve), or upgrade to a contactless <b>Mini-Innofader</b> for pro-level scratch performance (output is analog voltage). The Mini Innofader is a drop-in replacement crossfader module known for ultra durability.</li>
+        <li>2× Line faders (deck volume faders), 45–60 mm, 10 kΩ linear.</li>
+        <li>8× Rotary potentiometers, 10 kΩ linear (for 2× gain and 3-band EQ knobs per deck).</li>
+        <li>Knob caps for all pots and faders (choose styles to your taste; e.g., soft-touch rubber knobs for pots, and slider caps for the faders).</li>
       </ul>
     </li>
-    <li><b>Buttons & Encoders</b>
+    <li><b>Buttons &amp; Encoders</b>
       <ul>
-        <li>16–30× Momentary buttons (transport, FX, load, shift, pad modes)</li>
-        <li>1–2× Rotary encoders with push (browse, tempo)</li>
-        <li>1N4148 diodes for button matrix (ghost-free scanning)</li>
+        <li>16–30× Momentary push buttons for various functions (transport controls, FX on/off, load, shift, pad mode selectors, etc.). These can be arcade-style buttons or keyboard switches or any momentary pushbuttons. Ensure they’re not too tall so they fit in your case.</li>
+        <li>1–2× Rotary encoders with push-in switch (for browser knob, tempo/pitch bend, etc.). Tip: use high-quality encoders (e.g., Bourns PEC11R series) for smooth, durable operation:contentReference[oaicite:2]{index=2}. The PEC11 encoders often come in 18 or 24 PPR with a built-in push switch. For the main jog wheels, we use a separate high-PPR encoder as above.</li>
+        <li>1N4148 signal diodes (one per button, if you wire a button matrix) to prevent ghosting when multiple buttons are pressed:contentReference[oaicite:3]{index=3}.</li>
       </ul>
     </li>
-    <li><b>Pads & LEDs</b>
+    <li><b>Pads &amp; LEDs</b>
       <ul>
-        <li>16–32× WS2812B (“NeoPixel”) for pads/indicators</li>
-        <li>1× 330 Ω series resistor on LED data; 1× 1000 µF electrolytic across LED 5 V/GND at strip start</li>
-        <li>18–20 AWG wire for 5 V injection if &gt;16 LEDs</li>
+        <li>16–32× WS2812B addressable RGB LEDs (aka “NeoPixels”) – e.g., one under each pad, plus any status indicators. These can be individual LEDs or cut from an LED strip. (Using full-color LEDs allows the software to light pads in different colors.)</li>
+        <li>1× 330 Ω resistor in series with the LED data line (to protect the first LED from fast signal edges), and 1× 1000 µF electrolytic capacitor across the 5 V and GND where the LED strip begins (to smooth out power spikes).</li>
+        <li>Some 18–20 AWG wire to run 5 V and ground to the LED strips (for power injection if you have more than ~16 LEDs so they all get stable power). Thinner wire (24 AWG) is fine for data lines and shorter runs.</li>
       </ul>
     </li>
     <li><b>I/O Expansion</b>
       <ul>
-        <li>2× MCP23017 (I²C 16-bit GPIO expanders) for button matrix/LED drivers</li>
-        <li>0–2× CD74HC4067 (16-ch analog mux) if you exceed Teensy analog inputs</li>
+        <li>2× MCP23017 I²C GPIO expander chips (each gives 16 extra digital I/O pins). Typically used for a large button matrix and/or LEDs. These can be on breakout boards (e.g., Adafruit MCP23017 board) to make wiring easier.</li>
+        <li>0–2× CD74HC4067 16-channel multiplexer (only needed if the number of analog inputs exceeds Teensy’s capabilities). Each 74HC4067 can connect 16 analog signals into 1 analog input using 4 address lines. You might use this if you add a lot of knobs/faders (Teensy 4.1 has 14 analog-in pins on board). Many breakout modules exist for this chip.</li>
       </ul>
     </li>
     <li><b>Display</b>
-      <ul><li>1–2× 0.96″/1.3″ OLED (SSD1306 I²C) for deck status</li></ul>
-    </li>
-    <li><b>Enclosure & Mechanics</b>
       <ul>
-        <li>Top plate: 2–3 mm aluminum or 3 mm acrylic; base: wood/3D printed</li>
-        <li>M3 standoffs, panel screws, panel-mount USB passthrough (optional)</li>
-        <li>Printed overlay or engraving for labels</li>
+        <li>1–2× Small OLED displays (typically 0.96″ or 1.3″ diagonal, 128×64 monochrome with SSD1306 or SH1106 driver, I²C interface). These can show info like track name, BPM, or loop status. (They’re optional but add a nice professional touch.) Get I²C versions to minimize wiring (just 4 wires for all displays on the I²C bus).</li>
       </ul>
     </li>
-    <li><b>Power & EMC</b>
+    <li><b>Enclosure &amp; Mechanics</b>
       <ul>
-        <li>Power from USB; add 5 V/2–3 A external if many LEDs (common ground!)</li>
-        <li>Caps: 1000 µF near LEDs; 10 µF + 0.1 µF per board segment</li>
-        <li>Ferrite bead on 5 V (optional), ESD diodes on USB D± (optional)</li>
+        <li>Panel material for the top plate: ideally 2–3 mm aluminum for rigidity, or 3 mm acrylic, or even wood. This top plate will hold all the components (jogs, knobs, buttons). The base enclosure can be made of wood, acrylic, 3D-printed plastic, or even a repurposed metal case. Size ~ (see layout section).</li>
+        <li>M3 standoffs, spacers, and screws to mount the Teensy and other boards inside, and to support the top panel. Also panel-mount hardware for USB (you can get a panel-mount USB-B or USB-C extension to make a nice connector on the case).</li>
+        <li>Labels for controls: consider printing an overlay (on paper or vinyl) or doing laser engraving or stickers for the panel markings (so you know which knob is which!). This improves usability and the pro look.</li>
+      </ul>
+    </li>
+    <li><b>Power &amp; Filtering</b>
+      <ul>
+        <li>Power source is USB 5 V from the computer for most builds. If you plan on drawing a lot of LED power (more than ~500 mA total), add a dedicated 5 V DC supply (e.g., a phone charger or DC-DC converter) to feed the LEDs, and be absolutely sure to tie its ground to the Teensy’s ground. The Teensy itself and all sensors run on 5 V/3.3 V from USB in a normal setup.</li>
+        <li>Bulk capacitors: 1000 µF near the LED strips (as mentioned) to stabilize LED power. Also sprinkle a few 10 µF electrolytics and 0.1 µF ceramic capacitors across the Teensy and expander boards’ power rails (especially at far ends of the board) to keep the 3.3 V stable and noise-free.</li>
+        <li>EMC/ESD protection: If available, a ferrite bead or choke on the 5 V USB line can filter noise. For extra robustness, you can add USB ESD protection diodes on the D+ and D- lines (optional).</li>
       </ul>
     </li>
     <li><b>Tools</b>
-      <ul><li>Soldering iron, wire stripper, drill/step bit, files, multimeter (logic analyzer optional)</li></ul>
+      <ul>
+        <li>Soldering iron (fine tip preferred) and solder.</li>
+        <li>Wire cutters/strippers, a drill (with metal bits or a step-bit for drilling panel holes), files or a Dremel tool for finishing holes/slots, and screwdrivers, etc.</li>
+        <li>Multimeter (to check continuity, measure voltages). Optional but helpful: logic analyzer or oscilloscope (for debugging signals), and 3D printer or laser cutter access for making the enclosure.</li>
+      </ul>
     </li>
   </ul>
 
-  <h3>2.1 Alternatives (Cost & Feel)</h3>
+  <h3>2.1 Alternatives (Cost &amp; Feel)</h3>
   <ul>
-    <li><b>Microcontroller:</b> Teensy 4.1 (best). Teensy 3.x works with fewer pins. Arduino Leonardo works but limited in throughput/resolution.</li>
-    <li><b>Jog tech:</b> High-PPR encoder (cheap/precise) • Optical wheel (CDJ-style feel) • Hall sensor + magnet ring (smooth) • Motorized platter (advanced).</li>
-    <li><b>Crossfader:</b> B10k linear (software curve) • Mini-Innofader (pro, contactless).</li>
-    <li><b>Pads:</b> Arcade buttons • Rubber pad + LED underlight • DIY resin pads + FSR (velocity).</li>
+    <li><b>Microcontroller:</b> Teensy 4.1 is ideal (tons of I/O and 600 MHz ARM speed). Teensy 3.2/3.6 can work with fewer analog inputs and slightly lower performance. An Arduino Leonardo (ATmega32u4) can act as a USB-MIDI device too, but it has limited analog resolution and CPU power (you might hit latency limits as you add features). Some makers use Raspberry Pi Pico or STM32 boards with MIDI firmware — possible, but this guide sticks to Teensy for simplicity.</li>
+    <li><b>Jog mechanism:</b> Multiple approaches: a high-PPR mechanical encoder is the simplest for high resolution (and cheapest). Alternatively, an optical sensor with a slotted wheel (like older CDJ turntables) gives a very smooth feel (no detents) — you can DIY with an IR emitter/detector and printed encoder disk. A Hall-effect magnetic encoder is another option (smooth rotation, contactless sensing). And for the brave: a motorized platter that spins like a real turntable (usually using a brushless motor and feedback; very advanced!). Choose based on the feel you want and your budget/skills.</li>
+    <li><b>Crossfader options:</b> The basic slide pot works fine for mixing, especially if you implement software curves. If you want scratch performance, the Mini Innofader (by Audio Innovate) is a great upgrade: it uses contactless capacitance technology for ultra-fast response and longevity. There are also other pro fader modules (e.g., Pro X Fade, or DIY magnetic faders), but Innofader is popular and relatively easy to source. It drops in as a 3-pin analog output device.</li>
+    <li><b>Pads and buttons:</b> Arcade-style buttons (like Sanwa DENshi 24 mm or 30 mm buttons) are great for a chunky, tactile feel and come in many colors. If you prefer a drum-pad feel, you can get rubber pad arrays (from old MIDI controllers or kits) and put LEDs under them. For velocity sensitivity on pads, you could use piezos or force sensors (FSRs) under each pad, but that adds complexity (reading analog velocity and mapping to MIDI velocity). Simpler is on/off pads with RGB feedback, which is what we do here. You can always incorporate more exotic controls (touch strips, joysticks, etc.) as you design your layout.</li>
   </ul>
 </section>
 
@@ -153,93 +160,108 @@
 <section id="layout">
   <h2>3) Panel Layout (Human Factors)</h2>
   <ul>
-    <li>Width 450–520 mm; depth 250–300 mm. Jog center-to-center ≥ 230 mm to avoid hand collisions.</li>
-    <li>Jog diameter 120–150 mm. Crossfader at bottom; line faders above each deck.</li>
-    <li>EQ trios vertically per deck (Hi/Mid/Low), gain above. Pads in 2×4 blocks reachable from jog grip.</li>
-    <li>Browse encoder near center; Load A/B close to it. Transport below pads or near jog edge.</li>
+    <li>Controller dimensions: ~450–520 mm width, 250–300 mm depth is a comfortable range (similar to a two-deck commercial controller or mixer+decks setup). Space the jogs at least ~230 mm center-to-center so your hands don’t collide when using both decks.</li>
+    <li>Jog wheel size: 120–150 mm diameter platters feel good (slightly smaller than a vinyl record). Crossfader belongs at the bottom center for easy access. Line faders go above each jog (like a standard mixer channel fader position).</li>
+    <li>EQ knobs: arrange as 3 per deck (High, Mid, Low) in a vertical column, with Gain knob above them. This mimics a typical DJ mixer channel strip. The EQ section should be reachable while one hand is on the jog.</li>
+    <li>Pad grids: typically 2×4 pads per deck (like 8 pads on each side). Place them within comfortable reach of the jog (e.g., below the jog or to the left of it for Deck A / right of it for Deck B). You might position transport buttons (Play/Cue/Sync) either right below the jog or below the pads.</li>
+    <li>Browse &amp; load: A push encoder for browsing tracks ideally sits in the middle area, with “Load Deck A” and “Load Deck B” buttons nearby. This way both hands can access the browser knob and load buttons easily.</li>
   </ul>
-  <pre><code>[Deck A]       [Browser/OLED]        [Deck B]
-  ( JOG )         [ ENC + OLED ]        ( JOG )
+  <pre><code>[Deck A]       [Browser &amp; OLED]        [Deck B]
+  ( JOG )         [ ENCODER + OLED ]        ( JOG )
 Gain  EQ               LOAD A/B        Gain  EQ
-Line Fader           Crossfader      Line Fader
+Line Fader           < CROSSFADER >    Line Fader
 Pads (2×4)                             Pads (2×4)
 Transport A                          Transport B</code></pre>
-  <p><b>Tip:</b> Print the layout 1:1 on paper and “air-DJ” to validate reach and ergonomics.</p>
+  <p><b>Tip:</b> Before cutting any wood or metal, do a full-scale printout of your panel layout (at 1:1 scale) and place actual knobs/faders on it. “Air DJ” with this mock-up to make sure you can comfortably reach everything. Adjust spacing as needed. This step can save you from drilling a layout that looked good on screen but feels wrong in practice.</p>
 </section>
 
 <hr>
 
 <section id="electronics">
-  <h2>4) Electronics — Pin Map & Wiring</h2>
+  <h2>4) Electronics — Pin Mapping &amp; Wiring</h2>
 
-  <h3>4.1 Example Pin Plan (adjust as needed)</h3>
-  <pre><code>// Teensy 4.1 analog (pots/faders)
-A0  Crossfader
-A1  Line A
-A2  Line B
-A3  Gain A
-A4  EQ A Hi
-A5  EQ A Mid
-A6  EQ A Low
-A7  Gain B
-A8  EQ B Hi
-A9  EQ B Mid
-A10 EQ B Low
-// Add CD74HC4067 mux if more analogs needed
+  <h3>4.1 Example Pin Plan (for Teensy 4.1)</h3>
+  <pre><code>// Analog inputs (pots/faders) on Teensy 4.1:
+A0   Crossfader
+A1   Deck A Volume (line fader)
+A2   Deck B Volume (line fader)
+A3   Deck A Gain
+A4   Deck A EQ High
+A5   Deck A EQ Mid
+A6   Deck A EQ Low
+A7   Deck B Gain
+A8   Deck B EQ High
+A9   Deck B EQ Mid
+A10  Deck B EQ Low
+// (If you need more analog inputs than A0–A10, add a CD74HC4067 analog multiplexer)
 
-// Digital — encoders & jogs (prefer interrupt-capable pins)
-2,3     Jog A encoder (A/B)
-4       Jog A touch (TTP223 output or touchRead pin)
-5,6     Jog B encoder (A/B)
-7       Jog B touch
-8,9     Browse encoder (A/B)
-10      Browse push
-11      WS2812 DIN (through 330 Ω)
-18,19   I²C SDA/SCL (OLED + MCP23017)
-// MCP23017 expanders → rows/cols of button matrix on any free pins</code></pre>
+// Digital pins (Teensy 4.1) for encoders & buttons (choose interrupt-capable pins for encoders if possible):
+2    Jog A encoder A phase
+3    Jog A encoder B phase
+4    Jog A touch sensor input (if using a digital touch module like TTP223; LOW when touched)
+// Pin 4 is also a touchRead-capable pin if you use Teensy touch sensing
+5    Jog B encoder A
+6    Jog B encoder B
+7    Jog B touch sensor
+8    Browse encoder A
+9    Browse encoder B
+10   Browse encoder push button switch
+11   WS2812 LED data out (through a 330 Ω resistor)
+// I2C bus (for OLED display, MCP23017, etc.):
+18   I2C SDA
+19   I2C SCL
+// The MCP23017 expanders will use SDA/SCL plus two unique I2C addresses (0x20 + addr).
+// You can connect multiple devices (expanders, OLEDs) to the same SDA/SCL lines in parallel.</code></pre>
 
-  <h3>4.2 Analog Wiring (faders/pots)</h3>
+  <h3>4.2 Analog Wiring (Pots &amp; Faders)</h3>
   <ul>
-    <li>Each potentiometer: one outer leg → 3.3 V; other outer leg → GND; wiper → analog pin.</li>
-    <li>Twist wiper with ground to reduce noise; optional 0.01 µF cap wiper→GND for smoothing.</li>
+    <li>Potentiometers have three terminals: connect one outer pin to 3.3 V, the other outer pin to ground, and the middle (wiper) pin to the Teensy analog input. When you turn the knob, the wiper voltage will vary between 0–3.3 V.</li>
+    <li>Use shielded or twisted-pair wiring for analog signals if possible (twist the wiper line with a ground line) to reduce noise pickup. The Teensy’s ADC is fast but high-frequency noise can cause jitter. In practice, a short wire run and some smoothing in code (EMA filter) is sufficient.</li>
+    <li>Optionally, you can solder a small 0.01 µF capacitor between the wiper and ground at the pot to act as a low-pass filter. This can help stabilize any noise from the potentiometer, but don’t go too high in capacitance or it will slow down the response when you move the knob quickly.</li>
   </ul>
 
-  <h3>4.3 Button Matrix (ghost-free)</h3>
+  <h3>4.3 Button Matrix (for many buttons)</h3>
   <ul>
-    <li>Arrange buttons as R×C grid (e.g., 5×6 = 30). Drive rows low one at a time; read columns with pull-ups.</li>
-    <li>Place 1N4148 per switch (anode at row, cathode at switch) to prevent ghosting.</li>
-    <li>Use <b>MCP23017</b> expanders on I²C to get pins for rows/cols. Poll at ~1 kHz; debounce 5–10 ms.</li>
+    <li>If you have more than a dozen buttons, a matrix saves MCU pins. Organize buttons in a grid of rows and columns (e.g., 5 rows × 6 columns = 30 buttons). Wire one side of each button to a row wire (5 row lines), the other side to a column wire (6 column lines), with a diode in series for each button (diode anode on the row side, cathode on the column side).:contentReference[oaicite:4]{index=4} The diodes prevent “ghost” button presses when multiple buttons are held.</li>
+    <li>To read a matrix: set all row outputs HIGH except one row LOW at a time, and read the column inputs. Use internal pull-ups on the column inputs, so an unpressed button reads HIGH and a pressed one pulls the column LOW through the button. Scan each row quickly (e.g., 1000 scans per second, which is easy for Teensy) so button presses are detected promptly. Debounce in software (5–10 ms per button is usually enough).</li>
+    <li>The MCP23017 I/O expander chips are very handy here: you can dedicate, say, one MCP23017 to drive the rows and another to read the columns (or even just use one expander for all, since it has 16 I/O). These expanders sit on the I²C bus (SDA/SCL); you can poll them in your loop or use its interrupt capability for efficiency.</li>
   </ul>
 
-  <h3>4.4 Encoders</h3>
+  <h3>4.4 Rotary Encoders</h3>
   <ul>
-    <li>EC11-type: A/B → digital pins with <code>INPUT_PULLUP</code>, common → GND. Use state-table decoding or interrupts.</li>
-    <li>Add 1–4.7 nF caps from A and B to GND if bouncy.</li>
+    <li>Standard rotary encoders (like the EC11 type) have 3 pins: two phase outputs (A and B) and a common ground. Connect A and B each to a digital input on the Teensy (enable <code>INPUT_PULLUP</code> on those pins in setup). Turn the knob and you’ll get quadrature pulses. You can read them by polling or using interrupts. Teensy 4.1 has many interrupt-capable pins, so you can attach interrupts to both A and B channels for very fast response.</li>
+    <li>If the encoder is “noisy” (contact bounce), you might see extra toggles. Simple fix: a small capacitor (1 nF to 4.7 nF) from each encoder output pin to ground will debounce hardware-wise by slowing edge transitions. Or debounce in software by requiring a stable state or using a state table approach. The Bourns PEC11 series tend to be quite clean in output:contentReference[oaicite:5]{index=5}, while some cheaper encoders might need a little filtering.</li>
+    <li>For the high-resolution jog wheel encoders, the same principles apply, but because they have so many pulses per turn, avoid heavy processing in the interrupt. Just increment or decrement a counter (in a very short ISR) and handle the accumulated movement in the main loop.</li>
   </ul>
 
-  <h3>4.5 Jog Wheels</h3>
+  <h3>4.5 Jog Wheel Handling</h3>
   <ul>
-    <li><b>Rotation:</b> High-PPR encoder under platter. Keep ISR short; accumulate deltas in a volatile counter.</li>
-    <li><b>Touch:</b> Use TTP223/AT42QT output → digital pin (LOW on touch), or Teensy <code>touchRead()</code> on a touch-capable pin to a metal ring/platter (threshold = baseline+X).</li>
-    <li><b>Logic:</b> If touched → “scratch” (large relative steps); else → “nudge” (small steps).</li>
+    <li><b>Rotation sensor:</b> As above, use a high-PPR quadrature encoder or an optical sensor. Physically, you’ll likely mount the encoder so that the platter’s movement turns it. Common approaches include: fixing the encoder to the chassis and linking the platter via a shaft coupler or a small belt drive; or using a large-diameter encoder disk attached to the platter and a stationary optical fork sensor. Aim for at least 600 pulses per full revolution (quadrature gives 4× that in counts). With 600 PPR, one full spin yields 2400 counts, which is fine granularity for scratching.</li>
+    <li><b>Touch sensor:</b> The simplest is a capacitive touch module (TTP223, etc.) with its sensing pad connected to a metal foil or plate on the platter surface. These modules output a digital LOW when touched (and HIGH when not touched). Connect that output to a Teensy digital input. Adjust the module sensitivity if needed (some have a little capacitor you can change). Alternatively, Teensy’s built-in <code>touchRead()</code> can be used: you run a wire from a Teensy touch-capable pin to the jog’s metal surface. In software, measure baseline capacitance vs. when a hand is present. This is more complex to implement but avoids extra modules. Either way, the goal is a boolean: “platter is being touched by hand” vs not.</li>
+    <li><b>Scratch logic:</b> In your firmware, combine the above: If the platter is being touched, treat encoder movements as “scratch” (absolute position changes that pause the track when stationary); if not touched, treat movements as “nudges” or pitch bends (temporary speed up/down, since the DJ’s hand is just pushing the side). The exact MIDI messages for these could be different CCs or relative messages, which we’ll cover in the MIDI mapping section.</li>
   </ul>
 
-  <h3>4.6 LEDs (WS2812)</h3>
+  <h3>4.6 LEDs (WS2812B NeoPixels)</h3>
   <ul>
-    <li>Teensy pin → <b>330 Ω</b> → WS2812 DIN. Place <b>1000 µF</b> across LED 5 V/GND at strip start. Common ground with Teensy/USB.</li>
-    <li>Power injection every 16–32 LEDs if bright. Keep DIN wire short; route away from encoder/touch wiring.</li>
+    <li>WS2812B LEDs are daisy-chainable. Feed 5 V and GND from your power source to the strip (and don’t forget the large capacitor across 5 V/GND). Connect Teensy digital pin 11 to the DIN of the first LED *through a 330 Ω resistor* (this resistor helps suppress ringing on the data line). The subsequent LEDs connect DIN of LED2 to DOUT of LED1, etc.</li>
+    <li>Keep the LED data line short (<30 cm) and if it must be longer, use a twisted pair (data and ground together) to avoid interference. Also route the data line away from sensitive analog or touch sensor lines to avoid injecting noise.</li>
+    <li>Inject power every 16 LEDs or so: for example, if you have 32 LEDs in a chain, run a 5 V/GND pair from the PSU to the middle of the strip as well, not only the ends, to prevent voltage drop causing the far LEDs to dim (common issue in long strips).</li>
+    <li>Software: use the FastLED or Adafruit NeoPixel library. Teensy 4.1 is very fast and can drive many LEDs, but remember that updating LEDs is relatively slow (30 µs per LED). Don’t update them faster than necessary (60 FPS is smooth). FastLED allows non-blocking output using DMA on Teensy 4, so you can still handle MIDI in the background.</li>
   </ul>
 
-  <h3>4.7 OLED</h3>
-  <ul><li>I²C: SDA→18, SCL→19, VCC→3.3 V, GND→GND. Update at 10–20 Hz to save CPU.</li></ul>
-
-  <h3>4.8 Latency & Bandwidth Budget</h3>
+  <h3>4.7 OLED Display</h3>
   <ul>
-    <li>ADC 20 ch @ ~2–3 µs each → &lt; 0.1 ms per scan (plus EMA math).</li>
-    <li>MCP23017 scan 32 keys @ 400 kHz → &lt; 0.2 ms per full sweep.</li>
-    <li>Encoder/jog ISRs: 2–4 µs each edge; keep them tiny.</li>
-    <li>USB-MIDI: full-speed 12 Mbps; typical 1–3 ms host stack latency.</li>
-    <li><b>Budget total:</b> ~3–5 ms action→software — competitive with commercial gear.</li>
+    <li>Most small OLEDs (0.96″, 1.3″) use I²C by default (VCC, GND, SCL, SDA). On Teensy 4.1, connect VCC to 3.3 V (many can run on 5 V too, but 3.3 V is safer for logic), GND to GND, SDA to pin 18, SCL to pin 19. If you have multiple I²C devices (like two OLEDs and expanders), they can all share SDA/SCL — just ensure each device has a unique I²C address.</li>
+    <li>Update the OLED sparingly. These displays typically have slow refresh over I²C (especially 128x64 pixels = 1kB of data). Updating 20 times a second is usually fine for text info. The Adafruit SSD1306 library (with GFX) works well. You might print text like deck BPM, track name, or FX on/off. Don’t try to do complex animations; keep it simple (both for CPU load and visibility).</li>
+    <li>If using 1.3″ displays, note they often use SH1106 driver which has slightly different addressing than SSD1306. Libraries usually handle this, just be aware to choose the correct driver in code.</li>
+  </ul>
+
+  <h3>4.8 Latency &amp; Throughput Considerations</h3>
+  <ul>
+    <li>The Teensy 4.1’s ADC can read ~500k samples/sec, so reading ~12 analog inputs is extremely fast (sub-millisecond). Even with smoothing math, analog input processing is negligible in the time budget.</li>
+    <li>I²C at 400 kHz can scan two MCP23017 expanders (for a 32-button matrix) in perhaps 0.2 ms per scan. Debouncing might add a few ms for a stable press, but that doesn’t affect raw latency of initial press detection much.</li>
+    <li>Quadrature encoder interrupts: each detent might generate 4 interrupts (depending on encoder). Keep ISRs under a few microseconds (just increment a counter or set a flag). The main loop can then compute velocity or acceleration if needed. Teensy 4 can handle very high interrupt rates (even 25 kHz from an encoder) as long as the ISRs are efficient.</li>
+    <li>USB MIDI is Full Speed (12 Mbps) which has a 1 ms scheduling interval by design. In practice, from calling <code>usbMIDI.send()</code> to the PC software responding is often ~1–3 ms. So overall, achieving ~3–5 ms from action to software is realistic, matching or beating commercial gear. Keep your firmware loop efficient (no long <code>delay()</code> calls, etc.). If you do heavy work (like drawing to OLED or animating LEDs), do it on timers or in small chunks so as not to clog the main loop.</li>
   </ul>
 </section>
 
@@ -248,277 +270,354 @@ A10 EQ B Low
 <section id="firmware">
   <h2>5) Firmware Architecture</h2>
   <pre><code>setup():
-  - Configure USB-MIDI, I²C (OLED, MCP23017), FastLED
-  - PinModes for encoders, buttons, LEDs; attach jog ISRs
-  - Initialize analog smoothing state
-  - Show splash on OLED
+  - Configure USB as MIDI (Teensyduino setting) and begin serial (if debugging).
+  - Init I²C (Wire.begin for OLED/MCP23017), SPI if needed, FastLED LED setup.
+  - Set pinMode for all inputs/outputs (pinMode(INPUT_PULLUP) for buttons, etc.).
+  - Attach interrupts for jog encoders (if using ISR approach).
+  - Initialize variables for smoothing, last values, etc.
+  - Display a startup splash or LED flash (optional).
 
 loop():
-  - Read analogs → EMA → 14-bit scale → send CC (MSB/LSB pairs)
-  - Read encoders → relative CC with acceleration
-  - Scan button matrix → debounce → press/hold/double-tap → Note/CC
-  - Jog: consume delta; gate by touch → scratch/nudge relative CC
-  - Update LEDs non-blocking; update OLED on timer
-  - usbMIDI.read() to handle feedback (pad colors, indicators)</code></pre>
+  - Read all analog inputs -> apply EMA smoothing -> scale to 14-bit -> if changed, send MIDI (CC MSB/LSB pair).
+  - Read rotary encoders -> compute relative movement -> send MIDI relative CC.
+  - Scan button matrix (or direct buttons) -> debounce -> detect state changes -> send Note On/Off or CC.
+  - Read jog encoder delta (from ISR counter) -> if non-zero, decide scratch vs nudge based on touch sensor -> send relative MIDI (e.g., scratch CC).
+  - Update LED states (e.g., call FastLED.show() at a controlled rate or use FastLED’s asynchronous output).
+  - Update OLED display periodically (e.g., every 50 ms update a small section or on a timer interrupt).
+  - usbMIDI.read() to handle any incoming MIDI from host (for LED feedback), and act on it (update LED state variables, etc.).
+</code></pre>
 
-  <h3>5.1 High-Res Controls</h3>
+  <h3>5.1 High-Resolution MIDI (14-bit and Relative)</h3>
   <ul>
-    <li><b>14-bit CC:</b> Send two CCs: MSB (0–127) + LSB (0–127). Smooth with EMA, send only when value changes.</li>
-    <li><b>Relative encoders/jogs:</b> Send “two’s complement” relative values: 65 (+1), 63 (-1), 66 (+2), 62 (-2), etc. Many apps support this.</li>
-    <li><b>Pitch Bend alternative:</b> For one super-high-res control, use Pitch Bend (14-bit signed center=8192).</li>
+    <li><b>14-bit Continuous:</b> For knobs and faders (like EQs, volumes) you can send high-resolution MIDI by splitting a 14-bit value (0–16383) into two standard CC messages: one CC for MSB (most significant 7 bits) and another CC for LSB (least significant 7 bits). The receiving software combines them. MIDI has designated MSB/LSB CC pairs (e.g., 0x10 &amp; 0x30 as MSB/LSB for crossfader in our mapping). Only send LSB updates when MSB or LSB changes past a threshold to avoid flooding with data. Teensy’s <code>usbMIDI.sendControlChange()</code> is used for CC messages.</li>
+    <li><b>Relative (incremental) controls:</b> For endless encoders (and jog wheels), it’s common to send “relative” MIDI messages. One popular scheme: send a value of 65 for +1 tick and 63 for -1 tick (64 is considered “no change” midpoint). Larger movements can send 66 (+2), 67 (+3) up to 127 for big jumps, and correspondingly 62, 61... for negative jumps:contentReference[oaicite:6]{index=6}. Many DJ softwares (Traktor, etc.) support this “two’s complement” relative mode. The Teensy code would map a delta to this 0–127 range centered at 64. Alternatively, some software allows a signed byte where 1 = +1, 127 = -1, but we’ll use 65/63 for compatibility.</li>
+    <li><b>Pitch Bend:</b> MIDI Pitch Bend is a 14-bit message (ranges -8192 to +8191 around a center). You could use a pitch bend message for something like a super high-res jog or a special knob, since it gives you one 14-bit channel without splitting into two CCs. However, most DJ software doesn’t map pitch bend for jog wheels (they treat it specially for actual pitch sliders). So we’ll stick to CCs.</li>
   </ul>
 
-  <h3>5.2 Debouncing & Filtering Details</h3>
+  <h3>5.2 Debounce, Smoothing, and Filtering</h3>
   <ul>
-    <li><b>Buttons:</b> Software debounce 5–10 ms (e.g., Bounce2). Hardware option: 1 kΩ + 0.1 µF RC.</li>
-    <li><b>Analogs:</b> EMA: <code>y[n]=y[n-1]*(1-α)+α*x[n]</code>, with α≈0.05–0.1. Quantize to 14-bit; hysteresis ±1–2 LSB to reduce spam.</li>
-    <li><b>Encoders:</b> State-table decoding. Optional 1–4.7 nF caps to ground per channel.</li>
-    <li><b>Touch:</b> Calibrate baseline at boot; threshold baseline+Δ. Re-baseline if environment drifts.</li>
+    <li><b>Buttons debounce:</b> Mechanical buttons can chatter when closing/opening. Use a debounce library (e.g., Bounce2) or simple code that waits for a state to stabilize for, say, 5 ms. In our code, we call <code>Bounce.update()</code> each loop and check <code>fallingEdge()</code> or <code>risingEdge()</code> for clean events. If using a matrix, implement a small delay or state machine per button to confirm presses.</li>
+    <li><b>Analog smoothing (EMA):</b> We use an Exponential Moving Average filter for each analog input. For example, <code>filtered = filtered * (1 - α) + new_sample * α</code>, with α around 0.05–0.1 (5–10%). This smooths noise. Keep a 14-bit scaled value. Only send MIDI if the value changes by more than 1–2 counts to avoid jitter causing a flood of MIDI. This hysteresis is important; otherwise analog noise will make your faders “spam” tiny CC changes.</li>
+    <li><b>Encoder state table:</b> For reading encoders without interrupts, a common technique is a lookup table of transitions. You track the last 2-bit state of A/B and on each read, combine old state and new state (4 bits) to index a table that gives -1, +1, or 0 movement. The code in the appendix uses such a table (T table) to decode quicky. This approach inherently debounces small bounces (since invalid transitions yield 0).</li>
+    <li><b>Jog touch sensing:</b> If using <code>touchRead()</code>, calibrate at startup by sampling the untouched value a few times. Then set a threshold (e.g., +20 over baseline) above which you consider it “touched”. You might periodically re-calibrate the baseline if temperature/humidity change a lot over time. The dedicated touch module TTP223 handles this internally and even has a toggle/held mode you can configure by pads on the module.</li>
   </ul>
 
-  <h3>5.3 Reference Firmware (MVP)</h3>
-  <p><i>Skeleton that scans a dozen analogs, a few buttons, one encoder, basic jog A, RGB LEDs, and sends USB-MIDI. Expand per your pin map.</i></p>
-  <pre><code>// Teensy 4.1 — DIY DJ Controller (MVP)
-// USB Type: "MIDI". Install: Teensyduino support in Arduino IDE.
+  <h3>5.3 Reference Firmware (Minimal Viable Example)</h3>
+  <p><i>The following is a simplified Arduino/Teensyduino sketch snippet illustrating how to read inputs and send MIDI. This assumes one deck’s worth of controls and can be expanded. (In a real project, organize your code into multiple files for clarity.)</i></p>
+  <pre><code>// Teensy 4.1 DJ Controller - MVP Firmware Example
+// USB Type in Teensyduino: "MIDI". (Make sure to select this in Tools -> USB Type.)
 
-#include &lt;Arduino.h&gt;
-#include &lt;Wire.h&gt;
-#include &lt;Bounce.h&gt;
-#include &lt;Adafruit_GFX.h&gt;
-#include &lt;Adafruit_SSD1306.h&gt;
-#include &lt;FastLED.h&gt;
+#include &lt;Bounce.h&gt;                   // for button debouncing
+#include &lt;Adafruit_SSD1306.h&gt;          // for OLED display (optional)
+#include &lt;FastLED.h&gt;                   // for WS2812 LEDs
 
-// ---------- LEDs ----------
-#define LED_PIN   11
-#define NUM_LEDS  32
+// --------- LED Setup ---------
+#define LED_PIN    11
+#define NUM_LEDS   16       // e.g., 8 pads per deck * 2 decks
 CRGB leds[NUM_LEDS];
 
-// ---------- OLED ----------
-Adafruit_SSD1306 display(128, 64, &amp;Wire, -1);
+// --------- OLED Setup --------
+Adafruit_SSD1306 display(128, 64, &Wire, -1);  // using I2C, 0x3C address typical
 
-// ---------- Analogs ----------
-const int A_CROSS=A0,A_LINEA=A1,A_LINEB=A2,A_GA=A3,A_EQAH=A4,A_EQAM=A5,A_EQAL=A6;
-const int A_GB=A7,A_EQBH=A8,A_EQBM=A9,A_EQBL=A10;
+// --------- Analog Inputs (Pots/Faders) ---------
+const int A_CROSS = A0;
+const int A_LINEA = A1;
+const int A_LINEB = A2;
+const int A_EQHI_A = A4;
+const int A_EQMID_A = A5;
+const int A_EQLOW_A = A6;
+// (add B deck and gains as needed)
 
-static inline uint16_t ema14(uint16_t prev, uint16_t in, uint8_t k){ // k=0..255
-  return (prev*(255-k) + in*k) &gt;&gt; 8;
+uint16_t filt_cross = 0, last_cross = 0xFFFF;  // EMA filter and last value for crossfader
+
+// --------- Buttons (direct for MVP) ---------
+const int PIN_PLAY_A = 22;
+const int PIN_CUE_A  = 23;
+Bounce playA(PIN_PLAY_A, 8);
+Bounce cueA(PIN_CUE_A, 8);
+// (You can expand this or use matrix inputs via MCP23017 in a real build)
+
+// --------- Encoder (Browser) ---------
+const int ENC_A = 8, ENC_B = 9, ENC_BTN = 10;
+int8_t browsePos = 0;
+static uint8_t encState = 0;
+const int8_t encTransition[4][4] = {
+  {0, -1, +1, 0},
+  {+1, 0, 0, -1},
+  {-1, 0, 0, +1},
+  {0, +1, -1, 0}
+};
+// The above table maps old state (rows) and new state (cols) to -1, 0, +1.
+
+// --------- Jog Wheel A (Encoder + Touch) ---------
+const int JOG_A1 = 2, JOG_A2 = 3, JOG_TOUCH = 4;
+volatile int jogCount = 0;
+void IRAM_ATTR jogA_ISR() {
+  // ISR for both A and B encoder channels (attached on CHANGE)
+  int a = digitalReadFast(JOG_A1);
+  int b = digitalReadFast(JOG_A2);
+  // Determine direction by XOR logic:
+  if (a ^ b) jogCount++; else jogCount--;
 }
 
-struct AChan {
-  int pin; uint16_t filt=0,last14=0xFFFF; uint8_t ccMSB,ccLSB,ch;
-  void init(int p,uint8_t msb,uint8_t lsb,uint8_t c){ pin=p; ccMSB=msb; ccLSB=lsb; ch=c; }
-  void tick(uint8_t k=32){            // k≈32 → α≈0.125
-    uint16_t raw10 = analogRead(pin); // 0..1023
-    uint16_t raw14 = raw10 &lt;&lt; 4;      // upscale to 14-bit
-    filt = ema14(filt, raw14, k);
-    uint16_t v = filt;
-    if (last14==0xFFFF || (abs((int)v-(int)last14)&gt;=2)){
-      last14 = v;
-      uint8_t msb=(v&gt;&gt;7)&amp;0x7F, lsb=v&amp;0x7F;
-      usbMIDI.sendControlChange(ccMSB, msb, ch);
-      usbMIDI.sendControlChange(ccLSB, lsb, ch);
-    }
-  }
-} cross,lineA,lineB,ga,eqaH,eqaM,eqaL,gb,eqbH,eqbM,eqbL;
+void setup() {
+  // Pin modes
+  pinMode(PIN_PLAY_A, INPUT_PULLUP);
+  pinMode(PIN_CUE_A,  INPUT_PULLUP);
+  pinMode(ENC_A, INPUT_PULLUP);
+  pinMode(ENC_B, INPUT_PULLUP);
+  pinMode(ENC_BTN, INPUT_PULLUP);
+  pinMode(JOG_A1, INPUT_PULLUP);
+  pinMode(JOG_A2, INPUT_PULLUP);
+  pinMode(JOG_TOUCH, INPUT_PULLUP);  // assuming TTP223 active-low output
 
-// ---------- Buttons (direct pins for MVP) ----------
-const int BTN_PLAY_A=22, BTN_CUE_A=23, BTN_SYNC_A=24;
-Bounce bPlayA(BTN_PLAY_A,7), bCueA(BTN_CUE_A,7), bSyncA(BTN_SYNC_A,7);
+  attachInterrupt(JOG_A1, jogA_ISR, CHANGE);
+  attachInterrupt(JOG_A2, jogA_ISR, CHANGE);
 
-// ---------- Browse Encoder ----------
-const int ENC_A=8, ENC_B=9, ENC_BTN=10;
-static inline int8_t encRead(){
-  static uint8_t p=0;
-  uint8_t s=(digitalRead(ENC_A)?1:0)|((digitalRead(ENC_B)?1:0)&lt;&lt;1);
-  static const int8_t T[4][4]={{0,-1,1,0},{1,0,0,-1},{-1,0,0,1},{0,1,-1,0}};
-  int8_t d=T[p][s]; p=s; return d;
-}
+  // Init LED strip
+  FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(128);
+  FastLED.show();  // start all off
 
-// ---------- Jog A (encoder + touch gate) ----------
-const int JOGA_A=2, JOGA_B=3, JOGA_TOUCH=4;
-volatile int8_t jogA_delta=0;
-void IRAM_ATTR isrJogaA(){ int a=digitalRead(JOGA_A), b=digitalRead(JOGA_B); jogA_delta += (a^b)?+1:-1; }
-void IRAM_ATTR isrJogaB(){ int a=digitalRead(JOGA_A), b=digitalRead(JOGA_B); jogA_delta += (a^b)?-1:+1; }
-
-void setup(){
-  // Pins
-  pinMode(BTN_PLAY_A,INPUT_PULLUP); pinMode(BTN_CUE_A,INPUT_PULLUP); pinMode(BTN_SYNC_A,INPUT_PULLUP);
-  pinMode(ENC_A,INPUT_PULLUP); pinMode(ENC_B,INPUT_PULLUP); pinMode(ENC_BTN,INPUT_PULLUP);
-  pinMode(JOGA_A,INPUT_PULLUP); pinMode(JOGA_B,INPUT_PULLUP); pinMode(JOGA_TOUCH,INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(JOGA_A), isrJogaA, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(JOGA_B), isrJogaB, CHANGE);
-
-  // LEDs
-  FastLED.addLeds&lt;WS2812B, LED_PIN, GRB&gt;(leds, NUM_LEDS); FastLED.setBrightness(96);
-  fill_solid(leds, NUM_LEDS, CRGB::Black); FastLED.show();
-
-  // OLED
+  // Init OLED
   Wire.begin();
-  display.begin(SSD1306_SWITCHCAPVCC,0x3C);
-  display.clearDisplay(); display.setTextColor(WHITE); display.setTextSize(1);
-  display.setCursor(0,0); display.print("DIY DJ Controller"); display.display();
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+  display.println("DIY DJ Controller");
+  display.display();
 
-  // Analogs → (MSB,LSB,channel)
-  cross.init(A_CROSS,0x10,0x30,1);
-  lineA.init(A_LINEA,0x11,0x31,1);
-  lineB.init(A_LINEB,0x12,0x32,1);
-  ga.init(A_GA,0x13,0x33,1);
-  eqaH.init(A_EQAH,0x14,0x34,1); eqaM.init(A_EQAM,0x15,0x35,1); eqaL.init(A_EQAL,0x16,0x36,1);
-  gb.init(A_GB,0x17,0x37,1);
-  eqbH.init(A_EQBH,0x18,0x38,1); eqbM.init(A_EQBM,0x19,0x39,1); eqbL.init(A_EQBL,0x1A,0x3A,1);
+  // (If using MCP23017, init I2C and configure expander pins here)
 }
 
-void loop(){
-  // --- Analogs
-  cross.tick(); lineA.tick(); lineB.tick();
-  ga.tick(); eqaH.tick(); eqaM.tick(); eqaL.tick();
-  gb.tick(); eqbH.tick(); eqbM.tick(); eqbL.tick();
-
-  // --- Buttons
-  bPlayA.update(); bCueA.update(); bSyncA.update();
-  if (bPlayA.fallingEdge()) usbMIDI.sendNoteOn(0x24,127,1);
-  if (bPlayA.risingEdge())  usbMIDI.sendNoteOff(0x24,0,1);
-  if (bCueA.fallingEdge())  usbMIDI.sendNoteOn(0x25,127,1);
-  if (bCueA.risingEdge())   usbMIDI.sendNoteOff(0x25,0,1);
-  if (bSyncA.fallingEdge()) usbMIDI.sendNoteOn(0x26,127,1);
-  if (bSyncA.risingEdge())  usbMIDI.sendNoteOff(0x26,0,1);
-
-  // --- Browse encoder: relative CC 0x40 (two's complement 65/63)
-  int8_t d=encRead();
-  if (d) usbMIDI.sendControlChange(0x40, (d&gt;0)?65:63, 1);
-  if (!digitalRead(ENC_BTN)){ usbMIDI.sendNoteOn(0x2F,127,1); delay(6); usbMIDI.sendNoteOff(0x2F,0,1); }
-
-  // --- Jog A: scratch if touched, else nudge
-  bool touched=(digitalRead(JOGA_TOUCH)==LOW); // TTP223 active-low
-  int8_t jd=jogA_delta; jogA_delta=0;
-  if (jd){
-    int step = touched ? constrain(jd*4,-7,7) : constrain(jd,-3,3);
-    uint8_t v = 64 + step; // 64=center, 65=+1, 63=-1...
-    usbMIDI.sendControlChange(0x41, v, 1); // CC for Jog A
+void loop() {
+  // --- Read and send analog (example: crossfader) ---
+  int raw = analogRead(A_CROSS);         // 10-bit ADC result (0-1023)
+  uint16_t val14 = raw << 4;            // scale to 14-bit (0-16383)
+  // Simple EMA smoothing:
+  filt_cross = (filt_cross * 7 + val14) >> 3;  // α = 1/8 (adjust as needed)
+  // Only send if changed enough:
+  if (last_cross == 0xFFFF || abs(int(filt_cross) - int(last_cross)) > 3) {
+    last_cross = filt_cross;
+    uint8_t msb = (filt_cross >> 7) & 0x7F;
+    uint8_t lsb = filt_cross & 0x7F;
+    usbMIDI.sendControlChange(0x10, msb, 1);  // CC 0x10 = crossfader MSB on MIDI channel 1
+    usbMIDI.sendControlChange(0x30, lsb, 1);  // CC 0x30 = crossfader LSB
   }
 
-  // --- LED demo (pad heartbeat)
-  static uint8_t hue=0; hue++;
-  for (int i=0;i&lt;NUM_LEDS;i++) leds[i]=CHSV(hue+i*3,255,60);
+  // (Repeat for other analogs: line faders, EQ knobs, etc., with their respective CC numbers.)
+
+  // --- Buttons (Play/Cue) ---
+  playA.update(); cueA.update();
+  if (playA.fallingEdge()) usbMIDI.sendNoteOn(0x24, 127, 1);   // Note 0x24 = Play
+  if (playA.risingEdge())  usbMIDI.sendNoteOff(0x24, 0, 1);
+  if (cueA.fallingEdge())  usbMIDI.sendNoteOn(0x25, 127, 1);   // Note 0x25 = Cue
+  if (cueA.risingEdge())   usbMIDI.sendNoteOff(0x25, 0, 1);
+
+  // --- Browse Encoder (relative) ---
+  // Read the two encoder pins and update state:
+  encState = (encState & 0x3) | (digitalReadFast(ENC_A) << 2) | (digitalReadFast(ENC_B) << 3);
+  // encState holds old state in bits0-1, new state in bits2-3.
+  int8_t encDelta = encTransition[encState & 0x3][encState >> 2];
+  if (encDelta != 0) {
+    // For relative CC (two's complement), 65 = +1, 63 = -1:
+    uint8_t midiVal = (encDelta > 0 ? 65 : 63);
+    usbMIDI.sendControlChange(0x40, midiVal, 1);  // CC 0x40 = browse encoder
+    encState = (encState >> 2);  // save new state as old state
+  }
+  // Check encoder push button:
+  if (!digitalRead(ENC_BTN)) {  // button pressed (active low)
+    usbMIDI.sendNoteOn(0x2F, 127, 1);   // Note 0x2F = Load track
+    usbMIDI.sendNoteOff(0x2F, 0, 1);
+    delay(5);  // simple de-bounce (or use Bounce)
+  }
+
+  // --- Jog Wheel A ---
+  bool touching = (digitalReadFast(JOG_TOUCH) == LOW);  // TTP223 active low
+  noInterrupts();
+  int delta = jogCount;
+  jogCount = 0;
+  interrupts();
+  if (delta != 0) {
+    // Apply a multiplier if scratching (for finer control, one encoder tick moves more when finger down)
+    int adj = touching ? delta * 4 : delta;
+    if (adj > 7) adj = 7;
+    if (adj < -7) adj = -7;
+    uint8_t relVal = 64 + adj;  // 64 = no movement, 65 = +1, 63 = -1, etc.
+    usbMIDI.sendControlChange(0x41, relVal, 1);  // CC 0x41 = Jog A relative
+  }
+
+  // --- LED Example (simple heartbeat or level meter) ---
+  static uint8_t hue = 0;
+  hue++;
+  for (int i = 0; i < NUM_LEDS; i++) {
+    leds[i] = CHSV(hue + i*8, 255, 100);
+  }
   FastLED.show();
 
-  // --- MIDI IN feedback (e.g., pad colors)
-  while (usbMIDI.read()) { /* parse and set LEDs accordingly */ }
+  // --- MIDI Input (for feedback) ---
+  while (usbMIDI.read()) {
+    // In a full implementation, handle incoming MIDI (e.g., note -> set LED color).
+    // For example, if software sends Note 0x40 with velocity 5 for pad color, map that to LED[0] = color 5.
+  }
 }
 </code></pre>
 
-  <h3>5.4 Button Matrix with MCP23017 (pattern)</h3>
-  <pre><code>// Concept: R rows, C cols, diodes per key.
-// Pseudocode: drive one row LOW, others HIGH; read columns (active-low).
-// Debounce in software; emit Note/CC on state change.
-// Use two MCP23017: one for rows, one for cols, or split duties with Teensy pins.
-// Scan at ~1 kHz (every 1 ms).
-
-// Suggested data structure per key:
-struct Key { bool state=false, last=false; uint32_t t=0; } keys[R][C];
-// On press (falling edge): Note On; on release: Note Off.
-// Add long-press/double-tap by timing (t).</code></pre>
+  <h3>5.4 Button Matrix with MCP23017 (Pseudo-Code)</h3>
+  <p><i>If you use an I/O expander for a button matrix, your code will look conceptually like this:</i></p>
+  <pre><code>// Pseudocode for scanning a button matrix via MCP23017 expanders
+// Assume: 5 row lines (outputs) and 6 column lines (inputs with pullups) on the expander.
+for (int r = 0; r < 5; r++) {
+  // Drive one row low, others high:
+  setAllRowsHigh();
+  setRowLow(r);
+  delayMicroseconds(50); // small settle time
+  uint16_t colBits = readColumns(); // read 6 bits from expander (0 = pressed, 1 = not pressed)
+  for (int c = 0; c < 6; c++) {
+    bool pressed = !(colBits & (1 << c));
+    // Debounce logic for button[r][c]:
+    if (pressed != button[r][c].state) {
+      button[r][c].debounceCount++;
+      if (button[r][c].debounceCount > debounceThreshold) {
+        button[r][c].state = pressed;
+        button[r][c].debounceCount = 0;
+        if (pressed) sendNoteOn(noteMap[r][c], 127, 1);
+        else sendNoteOff(noteMap[r][c], 0, 1);
+      }
+    } else {
+      button[r][c].debounceCount = 0;
+    }
+  }
+}
+// (In practice, use interrupts from MCP23017 or poll at ~1 kHz in main loop.)
+</code></pre>
 </section>
 
 <hr>
 
 <section id="mapping">
   <h2>6) MIDI Mapping Plan</h2>
-  <p><i>You can choose any map; here’s a sane default that works everywhere.</i></p>
+  <p><i>You can choose any MIDI mapping you like in your DJ software. The list below is a sensible default that covers our controls. You’ll use your DJ software’s MIDI learn to map these accordingly.</i></p>
   <ul>
-    <li><b>Channels:</b> Ch.1 = Deck A + global; Ch.2 = Deck B. Pads can use Ch.10 if you prefer “drum” semantics.</li>
-    <li><b>14-bit CC pairs:</b>
+    <li><b>MIDI Channels:</b> We use Channel 1 for Deck A (and global controls), Channel 2 for Deck B. This keeps Deck A/B messages distinct. (MIDI has 16 channels; using two is common for two-deck controllers.) If you prefer, you could use one channel and different note numbers, but separating channels often aligns with software that expects Deck A vs Deck B mappings.</li>
+    <li><b>14-bit CC pairs (MSB/LSB):</b>
       <ul>
-        <li>Crossfader → CC MSB/LSB <code>0x10/0x30</code> (Ch.1)</li>
-        <li>Line A → <code>0x11/0x31</code> (Ch.1); Line B → <code>0x12/0x32</code> (Ch.2)</li>
-        <li>Gain A → <code>0x13/0x33</code> (Ch.1); Gain B → <code>0x17/0x37</code> (Ch.2)</li>
-        <li>EQ A Hi/Mid/Low → <code>0x14/0x34</code>, <code>0x15/0x35</code>, <code>0x16/0x36</code> (Ch.1)</li>
-        <li>EQ B Hi/Mid/Low → <code>0x18/0x38</code>, <code>0x19/0x39</code>, <code>0x1A/0x3A</code> (Ch.2)</li>
+        <li>Crossfader → CC <code>0x10</code> (MSB) &amp; <code>0x30</code> (LSB) on Ch1. (So MSB value is coarse position, LSB is fine position.)</li>
+        <li>Deck A line fader → CC <code>0x11/0x31</code> on Ch1; Deck B line fader → CC <code>0x12/0x32</code> on Ch2.</li>
+        <li>Deck A gain knob → CC <code>0x13/0x33</code> on Ch1; Deck B gain → CC <code>0x17/0x37</code> on Ch2. (We skip some numbers to group things logically.)</li>
+        <li>Deck A EQ High/Mid/Low → CC <code>0x14/0x34</code>, <code>0x15/0x35</code>, <code>0x16/0x36</code> on Ch1.</li>
+        <li>Deck B EQ High/Mid/Low → CC <code>0x18/0x38</code>, <code>0x19/0x39</code>, <code>0x1A/0x3A</code> on Ch2.</li>
       </ul>
+      (14-bit is optional – you could use simple 7-bit CCs too. But 14-bit gives finer control for things like EQ if the software supports it. Traktor/VirtualDJ/Rekordbox do support 14-bit for most analog controls.)
     </li>
-    <li><b>Jogs:</b> Relative CC: Deck A → CC <code>0x41</code> (Ch.1), Deck B → CC <code>0x42</code> (Ch.2). Values: 65(+1)/63(-1), scaled for speed.</li>
-    <li><b>Touch:</b> Note On while touched, Off when released (e.g., A: note <code>0x2A</code>, B: <code>0x2B</code>).</li>
-    <li><b>Browse:</b> Relative CC <code>0x40</code> (Ch.1). Press → Note <code>0x2F</code> (load/enter).</li>
-    <li><b>Transport (Deck A on Ch.1 / Deck B on Ch.2):</b> Play→Note <code>0x24</code>, Cue→<code>0x25</code>, Sync→<code>0x26</code>.</li>
-    <li><b>Pads:</b> A: Notes <code>0x40–0x47</code>; B: <code>0x48–0x4F</code>. App can send Note On with velocity=color index for pad LEDs.</li>
+    <li><b>Jog wheels:</b> We send these as relative controls. Deck A jog → CC <code>0x41</code> on Ch1, Deck B jog → CC <code>0x42</code> on Ch2. The value is 64 when idle, 65/63 for small moves (as explained earlier). In the DJ software, map these to “Jog Turn” or “Scratch” functions with relative mode. (In Traktor, for example, you’d choose “Encoder Relative (65/63)” mode with sensitivity settings.)</li>
+    <li><b>Jog touch:</b> When the platter is touched, send a Note On (e.g., Note <code>0x2A</code> on Ch1 for Deck A, and <code>0x2B</code> on Ch2 for Deck B). When released, send Note Off. In the software, map these to the “Scratch On” or “Vinyl mode” toggle (so the software knows when to stop the track and let you scratch). Some softwares instead expect a specific CC for touch; but note works too by mapping it to “hold” an action.</li>
+    <li><b>Browse knob:</b> Use CC <code>0x40</code> on Ch1 for the browser encoder (relative). The push on that knob we send as a Note (e.g., Note <code>0x2F</code> on Ch1) which we map to “Load selected track” (or enter/stack depending on software).</li>
+    <li><b>Transport buttons:</b> For each deck, we have Play, Cue, and Sync. Deck A (Ch1) could use Notes <code>0x24</code> (Play), <code>0x25</code> (Cue), <code>0x26</code> (Sync). Deck B (Ch2) use the same note numbers on channel 2. These will be Note On (velocity 127) on press, Note Off on release (we treat them as momentary, though in software these often toggle states).</li>
+    <li><b>Performance pads:</b> 8 pads per deck. We can use the MIDI drum notes range. For Deck A, use notes <code>0x40–0x47</code> on Ch1. For Deck B, <code>0x40–0x47</code> on Ch2 (or you could do <code>0x48–0x4F</code>, but using same note numbers on different channels is tidy). These will trigger hotcues, loops, or samples depending on how you map in software. The software can also send MIDI out to light the pads: e.g., when a hotcue is set, it might send Note On with a velocity that encodes a color. In our firmware, we’d interpret incoming Note On for those note numbers to update LED colors.</li>
   </ul>
 
-  <h3>6.1 Mapping in Real Software</h3>
+  <h3>6.1 Mapping in Popular DJ Software</h3>
   <ul>
-    <li><b>Traktor Pro:</b> Preferences → Controller Manager → Add → Generic MIDI → Learn. For jogs, set control to “Encoder” → Mode “Relative” → 65/63 (two’s complement). Crossfader either mapped to internal crossfader or per-deck volume if you prefer your own curve.</li>
-    <li><b>Rekordbox (MIDI mode):</b> Preferences → MIDI → MIDI Learn. Map jog to “Jog Bend”/“Scratch” rel. encoders, Play/Cue notes, EQ/line/gains to CCs. Keylock/tempo/loop as you prefer.</li>
-    <li><b>VirtualDJ:</b> Settings → Controllers → “Teensy MIDI”. Use the mapper to bind relative controls; VDJ can send LED colors back (handle in <code>usbMIDI.read()</code>).</li>
-    <li><b>Ableton Live:</b> Preferences → Link/MIDI. Map controls to device macros. Great if you want to repurpose the controller for live sets.</li>
+    <li><b>Traktor Pro:</b> Go to Preferences &gt; Controller Manager. Add a Generic MIDI device. For each control, use the “Learn” function to assign the MIDI input. For jogs: map to “Jog Turn” (or “Scratch + Tempo Bend” depending on Traktor version) with type “Encoder” and mode “Relativ, 2’s complement”. Set sensitivity and acceleration to taste (Traktor might need sensitivity ~50%, acceleration 0 for scratch). Crossfader maps to “Crossfader” direct, 14-bit. The LED feedback: you can add Out mappings for LEDs (e.g., map deck play state to an LED note output).</li>
+    <li><b>Rekordbox (Performance mode with MIDI):</b> In Rekordbox, open the MIDI panel and use the MIDI Learn. Map Play/Cue/Sync easily by learning the note. Jogs can be mapped to “Jog dial” functions – select “Rotational (01H/7FH)” which corresponds to 65/63 incremental. Rekordbox might also allow scratch vs bend mapping if it supports jog touch (map our touch Note to the “Jog Touch” MIDI assignment). LED feedback in Rekordbox can be configured by enabling MIDI Out in the software and mapping the output to the same notes.</li>
+    <li><b>Virtual DJ:</b> This software has a very flexible mapping system, often auto-detects some controls. You might need to create a definition file for 14-bit CCs, or use their “simple MIDI wrapper”. The jog can be mapped with VDJscript like <code>param_smaller 0 ? jog -1 : param_bigger 0 ? jog +1 : nothing</code> which interprets our relative CC. VirtualDJ can also send back LED commands (e.g., cue point colors) – you handle those in <code>usbMIDI.read()</code> in firmware to set LED colors.</li>
+    <li><b>Ableton Live / Other DAWs:</b> If using this as a MIDI controller in Ableton, you’ll likely map the controls to device macros or faders. Ableton doesn’t know about “jog wheels” specifically, but you could map the jog to a scrub or nudge function in a Max4Live device, for instance. In general, this DIY controller is geared toward DJ software, but it can double as a general MIDI controller for other apps as needed.</li>
   </ul>
 </section>
 
 <hr>
 
 <section id="curves">
-  <h2>7) Crossfader Curves (Software)</h2>
-  <p>Read crossfader (0..16383) → compute per-deck gains before sending (if your app lacks good curves), or let the app handle it. Common shapes:</p>
-  <pre><code>// x in [0..1], left→right
-float x = pos14 / 16383.0f;
-float A_lin = 1.0f - x;
-float B_lin = x;
-
-float A_sharp = powf(1.0f - x, 3.0f);
-float B_sharp = powf(x, 3.0f);
-
-float dip = 4.0f*x*(1.0f-x); // center dip if you want a contour</code></pre>
-  <p><b>Tip:</b> Expose a “curve” setting in firmware (Shift + crossfader tap cycles shapes).</p>
+  <h2>7) Crossfader Curves (Software Tricks)</h2>
+  <p>The crossfader is just a linear potentiometer, but DJs often prefer certain volume curves (e.g., smooth fade vs sharp cut for scratching). You can implement this either in your DJ software (many have a curve setting for crossfader) or in your firmware by altering the MIDI data.</p>
+  <p>If doing in firmware: read the crossfader 0–16383 value and apply a curve formula to get two deck volumes. For example:</p>
+  <pre><code>// x = crossfader position 0.0 to 1.0 (0 = left deck fully, 1 = right deck fully)
+float x = crossfaderValue / 16383.0f;
+float volA, volB;
+ 
+// Linear curve:
+volA = 1.0f - x;
+volB = x;
+ 
+// Sharp cut (for scratching, very steep):
+volA = powf(1.0f - x, 3.0f);
+volB = powf(x, 3.0f);
+ 
+// Constant power (to avoid perceived dips):
+volA = cosf(x * (PI/2));
+volB = cosf((1.0f - x) * (PI/2));
+</code></pre>
+  <p>You could send MIDI for deck volumes instead of crossfader position, using these computed volumes (but that complicates mapping). Alternatively, send the raw crossfader and use the software’s curve feature. If you want to be fancy, you can even implement a “curve select” by holding a shift and moving crossfader to cycle through curve modes, and perhaps the OLED can display the current curve. This is an optional enhancement to explore.</p>
 </section>
 
 <hr>
 
 <section id="mechanical">
-  <h2>8) Mechanical Build — Panel & Platter</h2>
+  <h2>8) Mechanical Build — Panel &amp; Enclosure</h2>
   <ol>
-    <li><b>Paper prototype:</b> Print a 1:1 panel, tape on a board, test hand reach. Adjust jog spacing, pad position, fader lengths.</li>
-    <li><b>Mark & drill:</b> Center-punch holes. Pilot drill (3 mm), then step bit to final sizes:
+    <li><b>Paper prototype:</b> As mentioned in layout, print your design outline on paper or cardboard. Mark where all drills and cuts will go. Place actual components on it to ensure fit. This helps catch spacing issues. It’s cheap and easy to adjust paper, much easier than metal!</li>
+    <li><b>Mark &amp; drill the top panel:</b> If using aluminum or acrylic, tape the printed template on the panel. Center-punch the drill points (for better accuracy). Drill pilot holes (e.g., 3 mm) first, then enlarge to final diameters:
       <ul>
-        <li>Pots ~7–8 mm; encoders 7–10 mm; buttons per datasheet (usually 6–12 mm).</li>
-        <li>Fader slot: drill both ends then Dremel + file for a clean slot.</li>
-        <li>Jog: mount encoder/bearing precisely centered; ensure 1–2 mm platter clearance.</li>
+        <li>Standard pot/encoder shafts usually need ~7 mm holes (check your pot’s bushing thread diameter). If you have threaded pot shafts, drill just big enough for the shaft and maybe file two flats if there’s an anti-rotation tab.</li>
+        <li>Arcade buttons (if any) often are 24 mm or 30 mm diameter – hole saw or spade bit for those sizes (or a step drill bit works well in acrylic).</li>
+        <li>Fader slots: drill small holes at each end of the slot, then use a Dremel or file to cut out the rectangle between them. Go slowly to keep the slot neat. Many DIYers 3D-print a jig or use a small file to get smooth straight edges.</li>
+        <li>Jog wheel: you need a center hole for the platter’s spindle or bearing. This should be very precise. If using a large bearing (e.g., 22 mm skateboard bearing), drill or laser-cut that diameter. Also drill mounting holes for the encoder if it’s to be screwed to the panel, or design a bracket.</li>
       </ul>
+      Deburr all holes (sand the edges, remove sharp bits). For acrylic, avoid cracking by using sharp bits, moderate speed, and don’t force the drill. For metal, use cutting oil on larger holes.
     </li>
-    <li><b>Labeling:</b> Print adhesive overlay (laser print + laminate) or engrave/etch. Protect with clear coat.</li>
-    <li><b>Mount:</b> M3 standoffs for Teensy/boards; secure harnesses with zip ties; add strain relief to USB.</li>
+    <li><b>Labeling:</b> Now decide how to label each control (so you remember what is what while playing). Options:
+      <ul>
+        <li>Print an overlay: Design a graphic with labels and decorations, print on heavy paper or sticker, and lay it on the panel. You can sandwich it under a clear acrylic layer or laminate it.</li>
+        <li>Engrave or laser etch: If you have access to a laser cutter, you can etch text into acrylic (paint-fill it for visibility) or mark anodized aluminum. Looks very professional.</li>
+        <li>Hand labels: Even a label maker or rub-on letters can do the job if you prefer a functional look over fancy graphics.</li>
+      </ul>
+      After labeling, consider spraying a clear coat if it’s ink on paper to protect it.
+    </li>
+    <li><b>Assembly &amp; mounting:</b> Mount all your components into the top panel: pots, encoders, buttons, faders, etc. Secure them with their nuts or screws. Mount the Teensy and any breakout boards to standoffs or a perfboard. Begin the wiring harness: use cable ties or spiral wrap to keep it tidy. Ensure you have strain relief on the USB cable (you don’t want the USB jack on Teensy to bear stress – a panel-mount USB extension or a 3D-printed clamp for the cable is great).</li>
   </ol>
+  <p><b>Note:</b> If you have access to fabrication tools, you can achieve a very clean build. For example, laser-cutting the panel from 3 mm acrylic or 2 mm plywood can precisely do the holes and even engrave labels. CNC milling an aluminum panel is ideal for durability. 3D printing can be used to create custom brackets (for the jog wheel mechanism, for instance) or even the entire enclosure. Many builders 3D-print jog wheel platters or jog wheel slip rings. Just remember to finalize your electronics on a breadboard or temporary setup first, before spending time and money on a perfect enclosure:contentReference[oaicite:7]{index=7}. It’s easier to adjust code than to redrill holes!</p>
 </section>
 
 <hr>
 
 <section id="power">
-  <h2>9) Power, Grounding & Noise Immunity</h2>
+  <h2>9) Power, Grounding &amp; Noise</h2>
   <ul>
-    <li><b>Star ground:</b> Join grounds at a single point near power entry. LED ground path should meet Teensy ground at the star.</li>
-    <li><b>Caps:</b> 1000 µF at LED entry; 10 µF + 0.1 µF near ICs/expanders. Keep LED DIN away from analog/touch wiring.</li>
-    <li><b>LED current:</b> Cap brightness globally (e.g., 96/255). Use external 5 V supply if many LEDs; <b>always common ground</b>.</li>
+    <li><b>Star Ground:</b> Plan your ground wiring in a star or bus configuration that comes together at one point (e.g., the Teensy ground or a ground strip). This prevents ground loops and voltage drops. For instance, ground from each pot can join a common ground line that goes to Teensy. All board grounds (Teensy, button matrix board, LED strips, etc.) must connect together. The ground from an external PSU (if used for LEDs) must tie into the Teensy ground as well. One solid ground reference keeps sensor readings stable.</li>
+    <li><b>Decoupling capacitors:</b> We mentioned placing 0.1 µF (100 nF) ceramic capacitors near each IC’s power pins; these shunt high-frequency noise. Also use a few 10 µF electrolytics across the 3.3 V lines at different points. The idea is to keep the voltage rails steady even when, say, dozens of LEDs switch on or an encoder suddenly draws current through its pullups. The 1000 µF on the LED strip is crucial if powering many pixels, as the instantaneous current draw when LEDs change can be large.</li>
+    <li><b>LED power current:</b> Each WS2812 RGB LED can draw up to 60 mA at full white brightness. 16 LEDs could draw ~1 A if all on bright white. In practice, for colored cues and moderate brightness you’ll use far less. But design for worst case: either limit brightness in software (e.g., <code>FastLED.setBrightness(80)</code> to cap at ~30 mA/LED), or provide a beefy 5 V supply. If you use an external 5 V source, a 5 V 2 A or 3 A adapter is plenty. Always double-check polarity when connecting external power. Use a multimeter if unsure – reverse 5 V/GND can instantly destroy the Teensy or LEDs.</li>
+    <li><b>Noise considerations:</b> The jog touch sensor is high impedance and can pick up noise from LED switching or the microcontroller. If you encounter jittery touch readings, try to physically separate the touch sensor wiring from LED power wires. You can also add a 1 MΩ resistor from the touch plate to ground to stabilize its reference (for capacitive sensing). For audio (if using the audio shield), route audio jacks ground to the common ground near the Teensy. Use shielded cable for any audio signals to avoid USB noise getting into the output.</li>
   </ul>
 </section>
 
 <hr>
 
 <section id="bringup">
-  <h2>10) Bring-Up Procedure (Do Not Skip)</h2>
+  <h2>10) Bring-Up Procedure (Test as You Go)</h2>
+  <p><i>Don’t attempt to build everything and then plug it in expecting it to all work at once. Bring up the system in stages, verifying at each step.</i></p>
   <ol>
-    <li><b>USB-MIDI sanity:</b> Flash a sketch that sends a CC every second. Verify the OS sees a MIDI device; check with a MIDI monitor app.</li>
-    <li><b>One fader:</b> Wire crossfader only → read ADC → send 14-bit CC pair. Map in software; confirm smooth response end-to-end.</li>
-    <li><b>Three buttons:</b> Add Play/Cue/Sync; verify no double-fires (debounce OK).</li>
-    <li><b>Encoder:</b> Add browse encoder; map to track browser. Test acceleration (spin fast yields multiple steps).</li>
-    <li><b>Jog A:</b> Add encoder first (no touch) → verify nudge; then add touch sensor → scratch gating works.</li>
-    <li><b>Pads & LEDs:</b> Add 8 LEDs, map 8 pads. Implement simple color feedback from software to hardware.</li>
-    <li><b>Expand:</b> Add Deck B, line faders, EQs, second jog, remaining pads.</li>
-    <li><b>Soak test:</b> 30–60 min continuous use at performance brightness; move everything; verify no USB drops.</li>
+    <li><b>USB MIDI check:</b> First, verify your Teensy is recognized as a MIDI device by the computer. Load a simple sketch that sends a MIDI message every second (e.g., blink an LED and send a CC). On your PC, use a MIDI monitor to confirm the messages arrive. This ensures the Teensy and your development environment are set up correctly.</li>
+    <li><b>Single fader test:</b> Wire up just one analog fader (e.g., the crossfader) to the Teensy. Use the example code (Appendix A.1) to send 14-bit MIDI for that fader. In your DJ software or MIDI monitor, check that the values range 0–127 (MSB) smoothly as you move the fader. Ensure the readings are stable (no jitter when static). If you see jitter, consider adding filtering.</li>
+    <li><b>Button test:</b> Connect a few basic buttons directly to Teensy pins (with pull-ups). Run a test (Appendix A.2) that sends Note On/Off on button press. Verify in a MIDI monitor that each press yields one Note On and release yields Note Off (no bouncing). If you get multiple triggers, increase debounce time or add a small capacitor.</li>
+    <li><b>Encoder test:</b> Hook up one rotary encoder (e.g., the browse knob). Use a test (Appendix A.3) or the reference code to print or send MIDI for each tick. Rotate slowly and quickly – confirm you get the expected relative MIDI messages (e.g., one increment per detent). If you find the direction reversed, simply swap the A and B wires or invert the logic in code. If very fast spins are sometimes missed, consider using interrupts instead of polling.</li>
+    <li><b>Jog wheel basic test:</b> Connect one jog encoder (without touch sensor yet). In Traktor or your software, map the encoder to a temporary knob control for testing, or watch the MIDI monitor. Spin the jog fast and slow; verify you get a stream of relative messages. If the count is inverted (scratching forward shows negative), swap A/B inputs or adjust code. Mechanical alignment: ensure the jog spins freely and doesn’t wobble.</li>
+    <li><b>Jog touch test:</b> Now add the touch sensor for the jog. Test that touching the platter reliably triggers the sensor (monitor a digital pin LED or send a MIDI note for touch On/Off). Make sure it’s not too sensitive (triggering when you just hover a finger) nor too insensitive (not triggering unless you full palm it). Adjust either with the module’s sensitivity or code threshold. Once working, integrate it with the jog MIDI: when touch is on, switch your jog messages to “scratch mode” (larger increments or different target in software).</li>
+    <li><b>Pad and LED test:</b> Wire up a handful of WS2812 LEDs and corresponding pad buttons. Write a simple routine to light each LED in a different color when its button is pressed. Verify you can control the LEDs via code (if they don’t light, check wiring order, the series resistor, and that you declared the correct LED data pin). If the last LEDs in chain are dim, you may need to inject power at the end or reduce brightness.</li>
+    <li><b>Full deck integration:</b> Assemble one side (Deck A) completely: jog with touch, fader, 3 EQ knobs, gain, pads, play/cue, etc. Use the full firmware and test in your DJ software by mapping each control. Do a trial mix with one deck: check that all knobs respond, fader is smooth, button LED feedback works (e.g., map play button to light up when track is playing using MIDI Out from software). Iron out any kinks on this one deck.</li>
+    <li><b>Second deck and extras:</b> Now mirror for Deck B. Typically it’s easiest by duplicating the circuit and using the same wiring scheme just on different pins or addresses. Change the MIDI channel to 2 in firmware for those inputs. Test Deck B thoroughly as well.</li>
+    <li><b>Soak test &amp; performance:</b> Once both decks are up, do a long test. Let it run for an hour with continuous MIDI messages (you can script automation or just mix for a while). Ensure no lock-ups or overheating. Touch the voltage regulator or any part that might get warm (Teensy should be fine, but if you have many LEDs, check that your 5 V source isn’t too hot). Move all controls rapidly to see if any cause a flood that chokes the USB (if so, you might need to throttle MIDI sends). This endurance test gives confidence that the controller is stage-ready.</li>
   </ol>
 
-  <h3>10.1 Debugging With Tools</h3>
+  <h3>10.1 Debugging Tools &amp; Tips</h3>
   <ul>
-    <li><b>Multimeter:</b> Confirm 3.3 V reference on pots; verify GND continuity; check button idle HIGH with pull-ups.</li>
-    <li><b>Logic analyzer (optional):</b> Check encoder A/B 90° phase; verify matrix scan timing.</li>
-    <li><b>Serial plotter:</b> Print analog values to confirm range, jitter, smoothing impact.</li>
-    <li><b>MIDI monitor:</b> Inspect every Note/CC/14-bit pair. Ensure no spam when idle.</li>
+    <li><b>Multimeter:</b> Your best friend. If something isn’t working, check voltages. Is the 3.3 V reference actually 3.3 V? Does the pot output go 0–3.3 V end-to-end? Are all grounds connected? A continuity test can catch a miswire (e.g., a ground not actually common).</li>
+    <li><b>Serial print / USB debugging:</b> In Teensy, you can use <code>Serial.print()</code> to output debug info to the Arduino Serial Monitor (even while using USB MIDI, since Teensy can do multi-interface). Print out analog values or encoder steps to see what’s going on in real time. Just be careful not to flood prints inside an ISR or fast loop as it can slow things drastically.</li>
+    <li><b>Logic analyzer:</b> An inexpensive 8-channel logic analyzer (like Saleae clone or DSLogic) is extremely useful to visualize signals. You can watch the A/B encoder waveforms to verify the quadrature sequence and timing. You can also monitor the I²C bus to see if your expander is being polled correctly.</li>
+    <li><b>MIDI monitoring software:</b> On PC/Mac, tools like MIDI-OX (Win) or MIDI Monitor (Mac) or the built-in monitor in Traktor/VDJ can show incoming MIDI messages. Keep one open while testing – it’s invaluable for verifying that a control sends the intended message and nothing extra. If you press a button once but see two Note On messages, you know you have a bounce issue.</li>
+    <li><b>LED feedback testing:</b> Temporarily code your firmware to light an LED when a certain event happens (e.g., flash a pad LED when the jog touch is sensed, or vary LED brightness with a fader). This immediate visual feedback helps confirm that hardware and code are in sync without needing to stare at numbers on a screen.</li>
   </ul>
 </section>
 
@@ -527,117 +626,161 @@ float dip = 4.0f*x*(1.0f-x); // center dip if you want a contour</code></pre>
 <section id="troubleshooting">
   <h2>11) Troubleshooting</h2>
   <ul>
-    <li><b>Jog jitter/skips:</b> Add 1–4.7 nF to GND on A/B; check mechanical alignment; ensure pull-ups are enabled; keep LED wires away.</li>
-    <li><b>Buttons double-trigger:</b> Increase debounce to 10–12 ms; add 100 nF across switch; ensure diodes are oriented correctly in matrix.</li>
-    <li><b>ADC noise:</b> Short/twist analog wiring; add 0.01 µF on wiper; raise EMA constant; ensure stable 3.3 V reference.</li>
-    <li><b>USB hiccups:</b> Avoid <code>delay()</code> in hot paths; don’t spam MIDI (use hysteresis). Keep LED <code>show()</code> calls brief and infrequent (e.g., 60–120 Hz max).</li>
-    <li><b>LED end dims/yellows:</b> Add power injection mid/end; use thicker wire; lower brightness.</li>
+    <li><b>Jog wheel “jitter” or skips:</b> If your jog jumps values when not moving, or skips some values, suspect noise or mechanical issues. Try adding the small capacitors on the encoder lines to debounce (as mentioned earlier). Ensure the encoder and its bracket are not wobbling – any loose mount can cause missed pulses. Make sure you enabled pullups on the encoder inputs (floating inputs cause random triggers). Also check that LED data line isn’t routed near the encoder wires; the fast edges can induce noise – if so, re-route or shield them.</li>
+    <li><b>Double-triggering buttons:</b> If a single press yields two MIDI messages (seen in the monitor), increase your debounce delay a bit in code. Some very clicky buttons might need ~10 ms. Also confirm your diode orientation in the matrix – if diodes are backwards, ghosting or cross-triggering can occur. In a matrix, if you see weird phantom presses, you likely have a diode issue or a bug in scanning logic.</li>
+    <li><b>Noisy analog readings:</b> If one of your faders is jumping around in value when idle, check the wiring: Are the 3.3 V and GND both solidly connected to the ends of the pot? Ensure the cable for that analog isn’t running alongside a bunch of digital lines (which can inject noise). Try the 0.01 µF capacitor trick on the wiper. Also, you can increase the EMA filter weight (α smaller means heavier filtering). If after all that, one channel is still noisy, it could be a bad pot – but usually filtering will tame it.</li>
+    <li><b>USB MIDI dropouts or lag:</b> Teensy’s USB stack is reliable, so issues here are more likely due to sending too much data or doing something blocking. For example, calling <code>FastLED.show()</code> for a long LED strip can take a few milliseconds – if you do that too often, it can eat into USB servicing time. Solution: update LEDs at a lower rate (e.g., 100 Hz) or use FastLED’s asynchronous DMAMethod for WS2812 on Teensy 4. Also avoid using <code>delay()</code> except in controlled ways. Use <code>elapsedMillis</code> or timers for periodic tasks instead. If using Serial.print for debugging, that can also delay the loop if not careful (since USB Serial will wait if host isn’t reading fast enough).</li>
+    <li><b>LED at end of strip dimmer or yellowish:</b> This is a sign of voltage drop. The last LEDs aren’t getting full 5 V. The fix is power injection: run an additional 5 V/GND pair from your supply to the far end of the strip. Another cause can be too thin wires for power – ensure you use at least 18 AWG for main LED 5 V lines. If everything is powered via USB and you have many LEDs on white, you might be hitting USB’s 500 mA limit – consider an external supply for LEDs in that case or reduce brightness.</li>
+    <li><b>MIDI mapping confusion:</b> If some controls don’t seem to work in software, verify that the MIDI message you think is being sent is indeed what is sent. Check channels and CC numbers. It’s easy to accidentally off-by-one something. Also ensure the software isn’t interpreting a 14-bit CC as two separate CCs doing different things – sometimes you have to explicitly tell the software it’s a 14-bit. Read software’s MIDI mapping documentation when in doubt.</li>
   </ul>
 </section>
 
 <hr>
 
 <section id="upgrades">
-  <h2>12) Nice Upgrades → Rockstar-Grade</h2>
+  <h2>12) Upgrade Ideas (Future Enhancements)</h2>
   <ul>
-    <li><b>OLED per deck:</b> Show BPM, key, loop size, pad mode. Consider rendering mini waveforms via MIDI feedback.</li>
-    <li><b>Velocity pads:</b> FSR under pads; emulate aftertouch CC for effects.</li>
-    <li><b>Backlit legends:</b> Edge-lit acrylic labels for night gigs.</li>
-    <li><b>Haptic jog:</b> ERM/LRA motor under platter buzzes at cue points or vinyl “resistance”.</li>
-    <li><b>Motorized platter:</b> BLDC gimbal motor + slip ring; PID loop for vinyl torque emulation (advanced).</li>
-    <li><b>Modular panels:</b> Swap pad banks, FX panels, extra encoders using magnetic connectors.</li>
+    <li><b>Dual OLEDs or larger display:</b> One small OLED per deck can show track info, BPM, or even a tiny waveform. Or use a bigger TFT LCD in the middle for a more advanced UI. You’ll need to manage the drawing so as not to stall MIDI, but Teensy 4.1 can handle a lot. Some DIY controllers incorporate a phone or tablet as a display via custom apps – that’s another direction (though then it’s less “DIY electronics”).</li>
+    <li><b>Velocity-sensitive pads:</b> For finger drumming or effects, adding velocity adds a layer of expression. One way is to use piezo sensors under each pad (like an electronic drum pad) and read the analog spike to determine velocity. Another is force sensitive resistors (FSRs) that give a pressure reading. This complicates the circuit (analog mux likely needed) and code (scanning and calibrating velocities) but could be a fun project extension.</li>
+    <li><b>Backlit or illuminated labels:</b> If you have a laser-cut opaque top, you can carve text through and put LEDs or EL (electroluminescent) panels behind the text for a glow. Or edge-light a translucent acrylic faceplate and engrave labels so they shine. This makes the controller much more usable in dark environments (and looks awesome on stage).</li>
+    <li><b>Haptic feedback on jogs:</b> Advanced: add a small vibration motor or transducer under the jog that gives haptic ticks or resistance. For example, a rumble when you hit a loop endpoint or a cue marker (the software would send a MIDI signal to trigger it). You could even emulate the feel of a spinning platter slowing down by using a DC motor as a brake (requires motor control though).</li>
+    <li><b>Motorized platters:</b> This is a major project in itself, but if you truly want the vinyl turntable feeling, you can mount the jog platter on a motor (like a gimbal motor or a direct-drive from a old turntable). Use an ESC or servo driver to control speed, and possibly a slip ring to feed touch sensor signal. You’d then sync the motor with playback speed via MIDI clock or timecode. It’s complex but some have done it. Expect to dive into PID loops and high-current motor drivers.</li>
+    <li><b>Modular add-ons:</b> Maybe you want to occasionally have 4 decks, or add an effects module. You could design the controller in sections (magnetic or bolted modules) with a unified MIDI brain. For instance, a separate FX panel with extra knobs that plugs in via I²C or a secondary microcontroller talking to the main Teensy via serial. This way you can reconfigure your setup per gig. A simpler version: at least break out some spare analog ins or digital pins to a connector so you can prototype future add-ons without rebuilding the whole thing.</li>
+    <li><b>Configuration utility:</b> Develop a simple PC application or on-controller menu that lets you change MIDI mappings or adjust settings (like LED brightness, crossfader curve, etc.) without modifying code. For example, the Teensy could listen for special MIDI SysEx messages from a desktop app to update its behavior, or use an onboard button + encoder menu to toggle options. This makes your controller more user-friendly if others use it or if you bring it to different softwares.</li>
+    <li><b>Custom PCB:</b> After hand-wiring and testing everything on a perfboard or breadboard, consider designing a custom PCB that integrates the Teensy (or at least connectors for it) and all support components (diodes, headers for pots, etc.). This can drastically reduce the wiring mess and improve reliability. There are KiCad projects and open-source MIDI controller PCBs you can reference. It’s an investment of time (and some cost to fabricate), but rewarding when your next build is just “solder components to PCB, done.”</li>
   </ul>
 </section>
 
 <hr>
 
 <section id="verification">
-  <h2>13) Verification Checklist (Sign-Off)</h2>
+  <h2>13) Verification Checklist</h2>
   <ul>
-    <li>USB enumerates as MIDI every time; re-plug stable.</li>
-    <li>All analogs sweep 0..16383; no dead zones; curves feel right.</li>
-    <li>Matrix has no ghosting; rapid taps never miss.</li>
-    <li>Jogs: smooth nudge; scratch engages only when touched; no drift when idle.</li>
-    <li>LEDs: pad colors track software instantly (&lt;20 ms).</li>
-    <li>Mechanics: platters smooth; faders glide; panel rigid.</li>
-    <li>Soak: 60 min continuous use; no freezes or USB drops.</li>
+    <li><b>USB connectivity:</b> Controller enumerates as a MIDI device every time, on every computer tested. No random disconnects or the need to reboot mid-set.</li>
+    <li><b>Analog range and resolution:</b> All pots/faders send the full range of values (e.g., 0 to 127 for MSB). No dead spots at the ends, no jitter when left untouched. EQ knobs centered send exactly the center value (this helps if doing notches).</li>
+    <li><b>Button matrix reliability:</b> No ghost presses even when mashing multiple buttons. Each button triggers cleanly and rapidly. You can do drum rolls on the pads and every hit registers. No sticking notes (Note Off always sent).</li>
+    <li><b>Jog wheels performance:</b> Slow movement results in gentle nudging in software; fast spin can scratch quickly. When you take your hand off, scratch stops and jog returns to bend mode seamlessly. No random movements when you’re not touching it (if it does, revisit grounding/noise as mentioned).</li>
+    <li><b>LED feedback:</b> When you press a pad and the software is supposed to light it, it happens within ~1/60th of a second (around 16 ms or so). LEDs update without lag or flicker. If you change modes (e.g., flip from hotcue to sampler), the pad colors update correctly as commanded by software.</li>
+    <li><b>Physical robustness:</b> Give the controller a little shake – nothing should be rattling significantly. Jogs should spin freely but not wobble loose. Faders should glide but not feel like they’ll pop out. Buttons should all be securely mounted (if any are panel mount with nuts, ensure they’re tight). Basically, it should feel like one unit, not a fragile prototype.</li>
+    <li><b>Heat and power:</b> After an hour of use, nothing is overly hot. The voltage regulator on Teensy is not burning (Teensy 4.1 can get slightly warm, that’s normal). LEDs at full white might warm up but nothing smells or smokes (if the USB port or 5 V regulator gets too hot, you likely overdrew power – mitigate by lowering brightness or using external 5 V). If using external PSU, no part of the power wiring should be hot to touch.</li>
+    <li><b>Software integration:</b> Do a full practice mix or routine. Try loading tracks, setting hotcues, scratching, using sync, etc., with your mapping. Ensure the controller lets you do everything you intend. If you find you reach for the mouse/laptop for some function, maybe that’s an opportunity to map an extra button or knob for it on the controller.</li>
   </ul>
 </section>
 
 <hr>
 
 <section id="repo">
-  <h2>14) Repo Structure Template</h2>
+  <h2>14) Project Repository Structure (Suggested)</h2>
   <pre><code>firmware/
-  dj_controller.ino
-  jog.h jog.cpp
-  matrix.h matrix.cpp
-  leds.h leds.cpp
-  midi_map.h
+  ├── dj_controller.ino
+  ├── analog.h (analog input handling)
+  ├── jog.h / jog.cpp (jog wheel logic)
+  ├── matrix.h / matrix.cpp (button matrix scanning)
+  ├── leds.h / leds.cpp (LED control logic)
+  └── midi_map.h (definitions of MIDI notes/CCs)
+
 hardware/
-  panel-layout.pdf       (1:1 printable)
-  wiring-harness.pdf
-  pinmap.md
+  ├── panel_layout.svg (or .dxf – CAD drawing of the panel for drilling/laser-cutting)
+  ├── wiring_diagram.png (schematic or fritzing of connections)
+  ├── BOM.xlsx (detailed bill of materials with part #s and sources)
+  └── pcb_design/ (if you design a PCB, put files here, e.g., KiCad project)
+
 docs/
-  mapping-traktor.md
-  mapping-rekordbox.md
-  troubleshooting.md</code></pre>
+  ├── mapping_traktor.md (specific notes on mapping for Traktor)
+  ├── mapping_rekordbox.md
+  ├── photos/ (pictures of the build process and finished controller)
+  └── troubleshooting.md (a log of issues encountered and solutions)
+</code></pre>
+  <p>This is just a suggestion. Keeping your code and design files organized will help if you share the project on GitHub or want to revisit it later. It also helps others learn from your work!</p>
 </section>
 
 <hr>
 
 <section id="appendix">
-  <h2>Appendix — Minimal Test Sketches</h2>
+  <h2>Appendix — Test Sketches &amp; Snippets</h2>
 
-  <h3>A.1 Fader → 14-bit CC Pair (MSB/LSB)</h3>
-  <pre><code>// Teensy 4.1 — single analog to 14-bit CC pair (0x10/0x30)
-const int P=A0; uint16_t last=0xFFFF;
-void setup(){}
-void loop(){
-  uint16_t v14 = analogRead(P) &lt;&lt; 4;            // 10→14 bits
-  if (last==0xFFFF || abs((int)v14-(int)last) &gt;= 8){
-    last=v14;
-    usbMIDI.sendControlChange(0x10, (v14&gt;&gt;7)&amp;0x7F, 1);
-    usbMIDI.sendControlChange(0x30,  v14    &amp;0x7F, 1);
+  <h3>A.1 Single Fader to 14-bit MIDI CC</h3>
+  <pre><code>// Teensy 4.1 or 3.x
+// Reads one analog input (A0) and sends 14-bit MIDI CC on CC#0x10/0x30 (MSB/LSB) on Channel 1.
+const int FADER_PIN = A0;
+uint16_t prev = 0xFFFF;
+void setup() {
+  // USB MIDI automatically begun on Teensy
+}
+void loop() {
+  uint16_t analog10 = analogRead(FADER_PIN);  // 0-1023
+  uint16_t value14 = analog10 << 4;           // scale to 14-bit (0-16383)
+  // Only send if change exceeds 7 (to avoid noise jitter):
+  if (prev == 0xFFFF || abs(int(value14) - int(prev)) > 7) {
+    prev = value14;
+    uint8_t msb = (value14 >> 7) & 0x7F;
+    uint8_t lsb = value14 & 0x7F;
+    usbMIDI.sendControlChange(0x10, msb, 1);
+    usbMIDI.sendControlChange(0x30, lsb, 1);
+  }
+  delay(1);  // tiny delay to avoid saturating USB (optional)
+}</code></pre>
+
+  <h3>A.2 Button to Note (Debounced)</h3>
+  <pre><code>#include &lt;Bounce.h&gt;
+const int BUTTON_PIN = 2;
+Bounce button(BUTTON_PIN, 10);  // 10 ms debounce
+void setup() {
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+}
+void loop() {
+  button.update();
+  if (button.fallingEdge()) {
+    usbMIDI.sendNoteOn(60, 127, 1);  // Note C4 on channel 1
+  }
+  if (button.risingEdge()) {
+    usbMIDI.sendNoteOff(60, 0, 1);
   }
 }</code></pre>
 
-  <h3>A.2 Button → Note (debounced)</h3>
-  <pre><code>#include &lt;Bounce.h&gt;
-const int B=2; Bounce deb(B,8);
-void setup(){ pinMode(B,INPUT_PULLUP); }
-void loop(){
-  deb.update();
-  if (deb.fallingEdge()) usbMIDI.sendNoteOn(60,127,1);
-  if (deb.risingEdge())  usbMIDI.sendNoteOff(60,0,1);
-}</code></pre>
-
-  <h3>A.3 Encoder → Relative CC (65/63)</h3>
-  <pre><code>const int A=8,B=9;
-void setup(){ pinMode(A,INPUT_PULLUP); pinMode(B,INPUT_PULLUP); }
-void loop(){
-  static uint8_t p=(digitalRead(A)?1:0)|((digitalRead(B)?1:0)&lt;&lt;1);
-  uint8_t s=(digitalRead(A)?1:0)|((digitalRead(B)?1:0)&lt;&lt;1);
-  static const int8_t T[4][4]={{0,-1,1,0},{1,0,0,-1},{-1,0,0,1},{0,1,-1,0}};
-  int8_t d=T[p][s]; p=s;
-  if (d){ usbMIDI.sendControlChange(0x40,(d&gt;0)?65:63,1); }
+  <h3>A.3 Encoder to Relative MIDI CC</h3>
+  <pre><code>const int ENC_A = 8, ENC_B = 9;
+int lastState = 0;
+void setup() {
+  pinMode(ENC_A, INPUT_PULLUP);
+  pinMode(ENC_B, INPUT_PULLUP);
+  // Initialize lastState with current A and B
+  lastState = (digitalRead(ENC_B) << 1) | digitalRead(ENC_A);
+}
+void loop() {
+  int currentState = (digitalRead(ENC_B) << 1) | digitalRead(ENC_A);
+  int combined = (lastState << 2) | currentState;
+  // Use the same encTransition table logic:
+  int val;
+  switch(combined) {
+    case 0b1110: case 0b0100: case 0b0001: case 0b1011: val = +1; break;
+    case 0b1101: case 0b0010: case 0b0111: case 0b1000: val = -1; break;
+    default: val = 0;
+  }
+  if (val != 0) {
+    lastState = currentState;
+    usbMIDI.sendControlChange(0x40, (val > 0 ? 65 : 63), 1);
+  }
 }</code></pre>
 </section>
 
 <hr>
 
 <section id="safety">
-  <h2>Safety Notes</h2>
+  <h2>Safety Notes &amp; Final Advice</h2>
   <ul>
-    <li>All user-touchable metal (jog/platter) must be connected only to high-impedance touch sense inputs or sensor modules — <b>never</b> to power rails.</li>
-    <li>If using external 5 V for LEDs: check polarity twice; fuse it (e.g., 2–3 A polyfuse); <b>always common ground</b> with Teensy/USB.</li>
-    <li>Deburr panel edges; add strain relief to USB; keep wiring secured before closing the enclosure.</li>
+    <li><b>Electrical:</b> This project runs at low voltage (5 V and 3.3 V), which is generally safe. However, if you use external power adapters, double-check polarity and voltage. Use a fuse or current-limited supply if possible for the LED power to prevent fires in case of a short. Never connect any part of the metal jog or knobs to mains power obviously; keep it SELV (separated extra-low voltage).</li>
+    <li><b>ESD and grounding:</b> If you make a metal enclosure or have large metal surfaces (e.g., aluminum jog disc), they will pick up static. It’s wise to connect those to Teensy’s ground (through a 1 MΩ resistor is fine) or rely on the touch circuit’s high impedance. This is just to avoid you zapping the Teensy with static in a dry environment. Do not directly connect the platter to any Teensy pin configured as a regular digital output/input – only use the capacitive sense pin or an isolated sensor module for touch.</li>
+    <li><b>Mechanical safety:</b> Sand or file any sharp edges of your panel or enclosure. The last thing you want mid-set is a cut finger. If using acrylic, note that under stress it can crack – consider using washers under nuts to distribute force. Secure all components with proper nuts so they don’t come loose with vigorous use (use threadlocker or lock washers for things like the crossfader mount screws).</li>
+    <li><b>Cables and strain relief:</b> The USB cable should be secured where it enters the controller. If someone trips over the cable, it should not rip the Teensy off the panel. A simple solution is a panel-mount USB extension or a cable clamp tying the cable knot inside the enclosure. Similarly, any other external cables (audio out from an audio shield, etc.) should be strain-relieved.</li>
+    <li><b>Transport:</b> If you plan to carry this around, consider a case or at least a dust cover. Knobs and fader stems can bend if the unit is tossed in a bag. A hard case (even a DIY wooden box) will protect your creation. Plus, you can impress people when you pull a custom controller out of a custom case 😉.</li>
   </ul>
+  <p>Most of all, enjoy the build process and don’t be afraid to iterate. DIY electronics often require a few revisions to get perfect. Every mistake is a learning opportunity. When you finally perform with a controller you built yourself, it’s an awesome feeling. Good luck and happy building!</p>
 </section>
 
 <footer style="text-align:center;padding:20px;margin-top:40px">
   <small>© <span id="y"></span> DIY Music Lab — DJ Controller Guide</small>
 </footer>
-<script>document.getElementById('y').textContent = new Date().getFullYear()</script>
+<script>document.getElementById('y').textContent = new Date().getFullYear();</script>
 </body>
 </html>
