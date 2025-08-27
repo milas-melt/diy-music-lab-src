@@ -1,0 +1,499 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Granular Noise Totem</title>
+  </head>
+  <body>
+    <h1>Granular Noise Totem</h1>
+    <p><a href="../index.html">← Back to Home</a></p>
+
+    <p><b>Concept:</b> A sculptural granular synthesizer you build yourself. It starts as a quick lo-fi prototype (sound out of Teensy pins) and upgrades to pro-quality audio with the Teensy Audio Shield. You’ll control <i>pitch/speed</i>, <i>grain length</i>, <i>freeze</i> mode, and <i>wet/dry mix</i>. Optional: OLED display, reverb, presets.</p>
+
+    <p><b>What you’ll finish with:</b> a working instrument that generates evolving textures and drones, with knobs and buttons in a neat enclosure — and a repeatable workflow you can reuse for samplers/FX/other synths.</p>
+
+    <hr>
+
+    <h2>Bill of Materials (BOM)</h2>
+    <p>(Buy once for this and future music DIY projects. Quantities assume one build; add spares if you like.)</p>
+    <ul>
+      <li><b>Brains</b>
+        <ul>
+          <li>1× Teensy 4.1 (you have this)</li>
+          <li>1× USB data cable (USB-A→Micro-B or C→Micro-B adapter as needed)</li>
+        </ul>
+      </li>
+      <li><b>Pro Audio (Stage B)</b>
+        <ul>
+          <li>1× Teensy Audio Shield (Rev D/D2, SGTL5000)</li>
+          <li>Headers to stack Teensy + Audio Shield (male/female as preferred)</li>
+        </ul>
+      </li>
+      <li><b>Controls</b>
+        <ul>
+          <li>3× Potentiometers B10k (linear) — <i>Pitch/Speed, Grain Length, Wet/Dry</i></li>
+          <li>2× Momentary push buttons — <i>Freeze, Mode</i></li>
+          <li>Optional: 1× EC11 rotary encoder with push (menu/presets)</li>
+          <li>Optional: Knob caps for the pots</li>
+        </ul>
+      </li>
+      <li><b>I/O & Misc</b>
+        <ul>
+          <li>1× 3.5 mm stereo <b>female</b> jack breakout (AUX)</li>
+          <li>2× Resistors 220 Ω–1 kΩ (series for MQS output safety)</li>
+          <li>Jumper wires (male–male / male–female)</li>
+          <li>Breadboard (for prototyping)</li>
+          <li>Optional: 0.96″ or 1.3″ OLED (SSD1306/SH1106, I²C)</li>
+          <li>Optional: MicroSD card (for samples later; Teensy 4.1 has built-in slot)</li>
+        </ul>
+      </li>
+      <li><b>Enclosure & Tools</b>
+        <ul>
+          <li>1× Project box (Hammond 1590-style or ABS plastic)</li>
+          <li>Soldering iron + solder + side cutters + wire stripper</li>
+          <li>Small drill + step bit (for pot/button/jack holes)</li>
+        </ul>
+      </li>
+    </ul>
+
+    <hr>
+
+    <h2>Toolchain Setup (once)</h2>
+    <ol>
+      <li>Install Arduino IDE 2.x.</li>
+      <li>Install Teensy support (Boards Manager → “Teensy”).</li>
+      <li>Set <b>Tools → Board:</b> Teensy 4.1; <b>USB Type:</b> Serial; leave default CPU speed.</li>
+      <li>Verify <b>File → Examples → Audio</b> exists (Teensy Audio Library).</li>
+      <li>Upload <i>Blink</i> to confirm flashing works (LED blinks).</li>
+    </ol>
+
+    <hr>
+
+    <h2>Build Roadmap (do in order)</h2>
+    <ol>
+      <li><b>Stage A:</b> Lo-fi MVP (sound via Teensy MQS pins, no shield, no SD)
+        <ul>
+          <li>Wire 1–3 pots + 0–2 buttons.</li>
+          <li>Output to 3.5 mm jack using MQS pin(s) with series resistor(s).</li>
+          <li>Upload the minimal synth, then the granular MVP code.</li>
+          <li><b>Goal:</b> Hear a tone; Freeze and Mode buttons work; grain length + mix respond.</li>
+        </ul>
+      </li>
+      <li><b>Stage B:</b> Pro audio (stack Audio Shield)
+        <ul>
+          <li>Swap MQS output for I²S + SGTL5000 control.</li>
+          <li>Use shield’s headphone/line out; optionally add live input (mic/line).</li>
+          <li><b>Goal:</b> Clean stereo, ready for performance/recording.</li>
+        </ul>
+      </li>
+      <li><b>Stage C (optional):</b> OLED UI, reverb, presets, SD browsing, looper.</li>
+    </ol>
+
+    <hr>
+
+    <h2>Wiring (Stage A: MQS output)</h2>
+    <p><i>MQS is a quick prototype audio output available on Teensy 4.1 digital pins.</i></p>
+
+<pre><code>Teensy 4.1  (top view varies; check your pin labels)
+---------------------------------------------------
+Pots (B10k, each):
+  Left leg  → 3.3V
+  Right leg → GND
+  Middle    → A0 (Pitch), A1 (Grain), A2 (Wet)
+
+Buttons (momentary to GND):
+  One side → GND
+  Other    → Pin 2  (Freeze)
+            Pin 3  (Mode)
+  (Use INPUT_PULLUP in code.)
+
+Audio out (mono, Left channel, safe for AUX/headphones):
+  Pin 10 (MQS L) --[ 220Ω to 1kΩ ]--> 3.5mm TIP
+  GND -------------------------------> 3.5mm SLEEVE
+  (Optional stereo Right: Pin 12 --[resistor]--> 3.5mm RING)
+</code></pre>
+
+    <p><b>Verification:</b> After wiring, upload the <i>Minimal Synth</i> sketch below; you should hear a tone that changes with A0.</p>
+
+    <hr>
+
+    <h2>Code — Stage A.1 Minimal Synth (first sound)</h2>
+    <p>Open a new sketch, paste, upload. Turn A0 knob to change pitch.</p>
+<pre><code>// Teensy 4.1 — Minimal synth to MQS (pins 10=L, 12=R)
+// Wiring: A0 pot; MQS Left pin 10 → series resistor → AUX TIP; GND → SLEEVE.
+#include &lt;Audio.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;SPI.h&gt;
+
+AudioSynthWaveform   osc;
+AudioOutputMQS       mqs;
+AudioConnection      pc0(osc, 0, mqs, 0);  // L
+AudioConnection      pc1(osc, 0, mqs, 1);  // R (duplicate)
+
+void setup() {
+  AudioMemory(12);
+  osc.begin(WAVEFORM_SINE);     // SINE is softest on MQS
+  osc.amplitude(0.30f);
+}
+
+void loop() {
+  int raw = analogRead(A0);               // 0..1023
+  float f = 40.0f + (raw/1023.0f)*1160.0f; // ~40..1200 Hz
+  osc.frequency(f);
+}
+</code></pre>
+
+    <p><b>Pass criteria:</b> You hear a steady tone; pitch glides smoothly with A0.</p>
+
+    <hr>
+
+    <h2>Code — Stage A.2 Granular MVP (no SD, no shield)</h2>
+    <p>This routes an internal oscillator through the granular effect with controls:</p>
+    <ul>
+      <li><b>A0</b> = base pitch + granular speed</li>
+      <li><b>A1</b> = grain length (10–300 ms)</li>
+      <li><b>A2</b> = wet/dry mix</li>
+      <li><b>Pin 2</b> (button) = Freeze toggle</li>
+      <li><b>Pin 3</b> (button) = Mode toggle (pitch-shift vs freeze)</li>
+    </ul>
+<pre><code>// Teensy 4.1 — Granular Texture Box (no SD, no Audio Shield)
+// Output via MQS pins 10/12; controls A0/A1/A2; buttons on 2/3 to GND.
+#include &lt;Audio.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;SPI.h&gt;
+
+AudioSynthWaveform       osc;
+AudioEffectGranular      granular;
+AudioMixer4              mix;
+AudioOutputMQS           mqs;
+AudioConnection pc0(osc, 0, granular, 0);
+AudioConnection pc1(osc, 0, mix, 0);        // dry
+AudioConnection pc2(granular, 0, mix, 1);   // wet
+AudioConnection pc3(mix, 0, mqs, 0);        // L
+AudioConnection pc4(mix, 0, mqs, 1);        // R
+
+const int POT_PITCH  = A0;
+const int POT_GRAIN  = A1;
+const int POT_MIX    = A2;
+const int BTN_FREEZE = 2;
+const int BTN_MODE   = 3;
+
+static int16_t granularMemory[24000]; // ~0.54s buffer
+
+bool freezeMode=false, pitchMode=true, lastF=false, lastM=false;
+
+void setup(){
+  pinMode(BTN_FREEZE, INPUT_PULLUP);
+  pinMode(BTN_MODE,   INPUT_PULLUP);
+
+  AudioMemory(80);
+
+  osc.begin(WAVEFORM_SAWTOOTH);     // rich source for grains
+  osc.amplitude(0.35f);
+
+  granular.begin(granularMemory, 24000);
+  granular.beginPitchShift(1.0f);   // keep active
+
+  mix.gain(0, 0.5f);  // dry
+  mix.gain(1, 0.5f);  // wet
+}
+
+void loop(){
+  // Read pots
+  int rPitch = analogRead(POT_PITCH);
+  int rGrain = analogRead(POT_GRAIN);
+  int rMix   = analogRead(POT_MIX);
+
+  // Osc pitch 40..1200 Hz
+  float k = rPitch/1023.0f;
+  float freq = 40.0f + k*(1200.0f-40.0f);
+  osc.frequency(freq);
+
+  // Granular speed 0.25x..4x (exponential)
+  float speed = 0.25f * powf(16.0f, k);
+  granular.setSpeed(speed);
+
+  // Grain length 10..300 ms
+  float grainMs = 10.0f + (rGrain/1023.0f)*290.0f;
+  granular.setGrainLength(grainMs);
+
+  // Wet/dry 0..1
+  float wet = constrain(rMix/1023.0f, 0.0f, 1.0f);
+  mix.gain(0, 1.0f - wet);
+  mix.gain(1, wet);
+
+  // Buttons (edge detect)
+  bool fNow = (digitalRead(BTN_FREEZE)==LOW);
+  bool mNow = (digitalRead(BTN_MODE)==LOW);
+
+  if (fNow && !lastF){
+    freezeMode = !freezeMode;
+    granular.stop();
+    if (freezeMode)     granular.beginFreeze(grainMs*0.001f);
+    else if (pitchMode) granular.beginPitchShift(1.0f);
+  }
+  if (mNow && !lastM){
+    pitchMode = !pitchMode;
+    granular.stop();
+    if (pitchMode)      granular.beginPitchShift(1.0f);
+    else if (freezeMode)granular.beginFreeze(grainMs*0.001f);
+  }
+  lastF=fNow; lastM=mNow;
+}
+</code></pre>
+
+    <p><b>Pass criteria:</b> Freeze button latches a texture; grain length knob changes character; wet/dry blends; Mode toggles behavior.</p>
+
+    <hr>
+
+    <h2>Upgrade — Stage B: Audio Shield (clean stereo, line/mic)</h2>
+    <p>Stack the Teensy Audio Shield on your Teensy 4.1 (solder headers). Use the shield’s headphone jack or line out for clean audio. Code changes are minimal: switch output to I²S + enable the SGTL5000.</p>
+
+<pre><code>// Teensy 4.1 + Audio Shield (SGTL5000) — Granular Player (no SD needed yet)
+#include &lt;Audio.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;SPI.h&gt;
+#include &lt;SD.h&gt;
+
+AudioSynthWaveform       osc;
+AudioEffectGranular      granular;
+AudioMixer4              mix;
+AudioOutputI2S           i2s1;
+AudioControlSGTL5000     sgtl5000_1;
+
+AudioConnection pc0(osc, 0, granular, 0);
+AudioConnection pc1(osc, 0, mix, 0);
+AudioConnection pc2(granular, 0, mix, 1);
+AudioConnection pc3(mix, 0, i2s1, 0);
+AudioConnection pc4(mix, 0, i2s1, 1);
+
+const int POT_PITCH  = A0;
+const int POT_GRAIN  = A1;
+const int POT_MIX    = A2;
+const int BTN_FREEZE = 2;
+const int BTN_MODE   = 3;
+
+static int16_t granularMemory[32000]; // longer buffer (stereo out)
+
+bool freezeMode=false, pitchMode=true, lastF=false, lastM=false;
+
+void setup(){
+  pinMode(BTN_FREEZE, INPUT_PULLUP);
+  pinMode(BTN_MODE,   INPUT_PULLUP);
+
+  AudioMemory(90);
+  sgtl5000_1.enable();
+  sgtl5000_1.volume(0.6);
+  sgtl5000_1.lineOutLevel(13);
+
+  osc.begin(WAVEFORM_SAWTOOTH);
+  osc.amplitude(0.35f);
+
+  granular.begin(granularMemory, 32000);
+  granular.beginPitchShift(1.0f);
+
+  mix.gain(0, 0.5f);
+  mix.gain(1, 0.5f);
+}
+
+void loop(){
+  int rPitch = analogRead(POT_PITCH);
+  int rGrain = analogRead(POT_GRAIN);
+  int rMix   = analogRead(POT_MIX);
+
+  float k = rPitch/1023.0f;
+  float freq = 40.0f + k*(1200.0f-40.0f);
+  osc.frequency(freq);
+
+  float speed = 0.25f * powf(16.0f, k);
+  granular.setSpeed(speed);
+
+  float grainMs = 10.0f + (rGrain/1023.0f)*290.0f;
+  granular.setGrainLength(grainMs);
+
+  float wet = constrain(rMix/1023.0f, 0.0f, 1.0f);
+  mix.gain(0, 1.0f - wet);
+  mix.gain(1, wet);
+
+  bool fNow = (digitalRead(BTN_FREEZE)==LOW);
+  bool mNow = (digitalRead(BTN_MODE)==LOW);
+  if (fNow && !lastF){
+    freezeMode = !freezeMode;
+    granular.stop();
+    if (freezeMode)     granular.beginFreeze(grainMs*0.001f);
+    else if (pitchMode) granular.beginPitchShift(1.0f);
+  }
+  if (mNow && !lastM){
+    pitchMode = !pitchMode;
+    granular.stop();
+    if (pitchMode)      granular.beginPitchShift(1.0f);
+    else if (freezeMode)granular.beginFreeze(grainMs*0.001f);
+  }
+  lastF=fNow; lastM=mNow;
+}
+</code></pre>
+
+    <p><b>Pass criteria:</b> Clean stereo sound via shield’s headphone jack; controls behave exactly like Stage A.</p>
+
+    <hr>
+
+    <h2>Optional Add-Ons</h2>
+    <h3>OLED (SSD1306 I²C) — show values &amp; mode</h3>
+    <p>Wire OLED: <b>SDA→18</b>, <b>SCL→19</b>, <b>VCC→3.3 V</b>, <b>GND→GND</b>. Add a minimal status screen:</p>
+<pre><code>// Minimal OLED status (uses Adafruit_SSD1306) — add to the I2S sketch
+#include &lt;Adafruit_GFX.h&gt;
+#include &lt;Adafruit_SSD1306.h&gt;
+Adafruit_SSD1306 display(128, 64, &amp;Wire, -1);
+
+void setup(){
+  // ... existing audio setup ...
+  Wire.begin();
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  display.clearDisplay(); display.setTextSize(1); display.setTextColor(WHITE);
+}
+
+void loop(){
+  // ... existing control code ...
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.print("Granular Totem");
+  display.setCursor(0,12);
+  display.print("Pitch: "); display.print((int)oscFrequencyEstimate()); // optionally track
+  display.setCursor(0,24);
+  display.print("Grain: "); display.print((int)grainMs); display.print(" ms");
+  display.setCursor(0,36);
+  display.print("Wet: "); display.print((int)(wet*100)); display.print("%");
+  display.setCursor(0,48);
+  display.print("Mode: "); display.print(pitchMode ? "PitchShift" : "Freeze");
+  display.display();
+}
+</code></pre>
+    <p><i>(Implement <code>oscFrequencyEstimate()</code> or print the raw knob value; keep it simple.)</i></p>
+
+    <h3>Reverb (instant lush)</h3>
+<pre><code>// After granular, add reverb before mix:
+// AudioEffectFreeverb reverb; route granular -> reverb -> mix path
+// Example wiring changes:
+AudioEffectFreeverb reverb;
+// change: pc2(granular, 0, mix, 1)  --> becomes:
+AudioConnection pc2a(granular, 0, reverb, 0);
+AudioConnection pc2b(reverb, 0, mix, 1);
+// then add a pot for reverb roomsize/damp if desired:
+reverb.roomsize(0.75f);  // 0..1
+reverb.damping(0.45f);   // 0..1
+</code></pre>
+
+    <h3>Live input (with Audio Shield)</h3>
+<pre><code>// Replace oscillator source with shield input:
+AudioInputI2S input1;
+// Routing: input1 -> granular -> mix -> i2s1
+AudioConnection pca(input1, 0, granular, 0);
+// Now Freeze grabs live audio; add a looper later if you want.
+</code></pre>
+
+    <hr>
+
+    <h2>Enclosure Plan</h2>
+    <ol>
+      <li>Pick a box (Hammond 1590B/T or ABS). Arrange 3 knobs on top, 2 buttons under them, 3.5 mm jack on side/front. If using OLED, put it centered above knobs.</li>
+      <li>Mark &amp; drill: pots (7–8 mm holes), buttons (~12 mm, depends), jack (6.5 mm for 3.5 mm socket), OLED window if desired.</li>
+      <li>Mount hardware, then mount the Teensy (and Audio Shield) on standoffs or a small perfboard.</li>
+      <li>Wire pots (3.3 V/GND/wiper), buttons to pins with GND, audio jack to shield output (or MQS resistors if still Stage A).</li>
+      <li>Power via USB; optional: add a panel USB passthrough.</li>
+    </ol>
+
+    <hr>
+
+    <h2>Testing &amp; Verification Checklist</h2>
+    <ul>
+      <li>Stage A Minimal Synth
+        <ul>
+          <li>✅ Sound via MQS (Pin 10 → resistor → AUX tip; GND → sleeve)</li>
+          <li>✅ A0 changes pitch smoothly (no jumps)</li>
+        </ul>
+      </li>
+      <li>Stage A Granular MVP
+        <ul>
+          <li>✅ Freeze toggles a held texture</li>
+          <li>✅ A1 (grain) clearly shifts tone (short = buzzy, long = smooth)</li>
+          <li>✅ A2 blends dry/wet</li>
+          <li>✅ Mode toggles pitch-shift vs plain freeze feel</li>
+        </ul>
+      </li>
+      <li>Stage B Audio Shield
+        <ul>
+          <li>✅ Clean, louder stereo via headphone/line out</li>
+          <li>✅ No crackles; stable even when moving knobs/buttons</li>
+        </ul>
+      </li>
+      <li>Optional OLED/Reverb
+        <ul>
+          <li>✅ Display shows parameter values</li>
+          <li>✅ Reverb audible; not clipping</li>
+        </ul>
+      </li>
+    </ul>
+
+    <hr>
+
+    <h2>Troubleshooting (Read this if anything fails)</h2>
+    <ul>
+      <li><b>No sound (Stage A):</b> Confirm Pin 10 → series resistor → AUX TIP; GND → SLEEVE. Try <code>WAVEFORM_SINE</code>. Lower amplitude to ~0.2. Make sure your speaker/headphones volume is low then up.</li>
+      <li><b>Buttons inverted:</b> Buttons must go to GND with <code>pinMode(INPUT_PULLUP)</code>. If always “Pressed”, wiring is wrong or pin mis-assigned.</li>
+      <li><b>Pots jittery:</b> Ensure outer legs are 3.3 V and GND (not floating). Add 0.01–0.1 µF cap from wiper to GND if needed.</li>
+      <li><b>Harsh noise on MQS:</b> Expected lo-fi. The Audio Shield fixes fidelity. Keep amplitude modest; series resistor 220 Ω–1 kΩ is required.</li>
+      <li><b>Compilation errors (missing classes):</b> You must have Teensy Audio Library installed (Boards Manager “Teensy”). Use Arduino IDE 2.x with Teensy core.</li>
+      <li><b>Silence after a while:</b> Check <code>AudioMemory()</code> (try 80–100). Ensure you didn’t short the output or wire wrong pins.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Safety &amp; Best Practices</h2>
+    <ul>
+      <li>Don’t drive headphones directly from Teensy pins without the series resistor and only at low volume (MQS is not a headphone amp).</li>
+      <li>Do not power motors/relays from 3.3 V rail; keep analog audio ground clean.</li>
+      <li>Secure wires before closing the enclosure to avoid shorts.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Milestone Log Template (copy as you progress)</h2>
+    <p>Use this structure to document your build on your blog.</p>
+<pre><code>## YYYY-MM-DD — Milestone Name
+- Wiring done: [A0 pot, A1 pot, A2 pot, buttons on 2/3, MQS on 10/12]
+- Code flashed: [minimal synth / granular MVP / shield build]
+- Result: [what you heard, how it behaved]
+- Issues & fixes: [notes]
+- Next step: [what you'll do next]
+</code></pre>
+
+    <hr>
+
+    <h2>Glossary (quick refresher)</h2>
+    <ul>
+      <li><b>Granular synthesis:</b> Creating new textures by slicing sound into very short “grains” and rearranging/overlapping them.</li>
+      <li><b>Freeze:</b> Hold a short slice and loop/overlap it to create a drone.</li>
+      <li><b>Pitch-shift (speed):</b> Playing the buffer faster/slower (tape-like) to change pitch/timbre.</li>
+      <li><b>Wet/Dry:</b> Balance between effected (wet) and original (dry) signals.</li>
+      <li><b>MQS:</b> Teensy 4.x’s quick proto audio output on digital pins; good for testing, not hi-fi.</li>
+      <li><b>I²S:</b> Digital audio bus used by the Audio Shield for high-quality stereo I/O.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Progress Log</h2>
+    <p>I'm on it</p>
+
+    <hr>
+
+    <h2>Done? Next ideas</h2>
+    <ul>
+      <li>Add SD sample player and browse samples with the encoder.</li>
+      <li>Implement a simple looper (record/overdub) with one button.</li>
+      <li>Preset save/load to SD (tiny JSON or text).</li>
+      <li>MIDI over USB: map CCs to grain/pitch/wet for external control.</li>
+    </ul>
+
+    <p><i>Follow this page top-to-bottom. If you do each “Pass criteria”, you’ll finish with a working instrument.</i></p>
+  </body>
+</html>

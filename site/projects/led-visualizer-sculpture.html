@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LED Visualizer Sculpture</title>
+</head>
+<body>
+  <header>
+    <h1>LED Visualizer Sculpture</h1>
+    <nav><a href="../index.html">← Back</a></nav>
+  </header>
+
+  <main style="max-width:900px;margin:0 auto;padding:20px">
+    <p><strong>Concept:</strong> Build a sound-reactive light sculpture with addressable LEDs (WS2812/NeoPixel). Audio is analyzed in real time on the Teensy (mic/line-in), then mapped to animations (bars, waves, bursts) that pulse with your music.</p>
+    <p><strong>Finish line:</strong> A reliable, bright visual piece you can leave running on a desk/shelf. Modular code so you can add new visual “modes”. Safe power design, tidy wiring, and an enclosure/frame that looks artsy.</p>
+
+    <hr>
+
+    <h2>Bill of Materials (BOM)</h2>
+    <ul>
+      <li><strong>Brains</strong>
+        <ul>
+          <li>1× Teensy 4.1</li>
+          <li>(Recommended) 1× Teensy Audio Shield Rev D/D2 (SGTL5000) for clean line-in / headphone monitoring</li>
+        </ul>
+      </li>
+      <li><strong>LEDs & Power</strong>
+        <ul>
+          <li>WS2812B (a strip, ring, or matrix). Pick your count <em>N</em> (from 60 up to 300+)</li>
+          <li>5 V DC power supply sized for LEDs: <code>Current_max = N × 60 mA</code> (worst-case white). Practical rule: plan ~30 mA/LED. Example: 150 LEDs → 4.5 A–9 A PSU</li>
+          <li>1× 1000 µF electrolytic capacitor (≥6.3 V) across 5 V & GND near the strip</li>
+          <li>1× 330 Ω resistor in series with the LED data line</li>
+          <li>(Recommended) 1× 74HCT245 or 74HCT14 level shifter (3.3 V → 5 V data)</li>
+          <li>Decent gauge wire for power injection (18–20 AWG), and JST or screw terminals</li>
+        </ul>
+      </li>
+      <li><strong>Audio In (choose one)</strong>
+        <ul>
+          <li><b>Line-in</b> via Audio Shield from your phone/PC/mixer (3.5 mm AUX)</li>
+          <li><b>Electret mic</b> + preamp breakout (if you want the sculpture to listen to the room)</li>
+        </ul>
+      </li>
+      <li><strong>Build & Enclosure</strong>
+        <ul>
+          <li>Acrylic sheet(s) (clear/frosted) or wire/wood frame for the sculpture</li>
+          <li>Standoffs, zip ties, heat-shrink, perfboard for the level shifter</li>
+          <li>Soldering iron, solder, side cutters, wire stripper</li>
+        </ul>
+      </li>
+      <li><strong>Software (Arduino + libs)</strong>
+        <ul>
+          <li>Arduino IDE 2.x + Teensy support (Boards Manager → “Teensy”)</li>
+          <li>Either <b>FastLED</b> or <b>Adafruit_NeoPixel</b> (examples below use FastLED)</li>
+        </ul>
+      </li>
+    </ul>
+
+    <hr>
+
+    <h2>Roadmap (do in order)</h2>
+    <ol>
+      <li><b>Stage A — LED Bring-Up:</b> Power + test pattern (no audio). Verify wiring, brightness, and fps.</li>
+      <li><b>Stage B — Audio Level Reactive:</b> Simple VU meter / pulse using input amplitude (no FFT yet).</li>
+      <li><b>Stage C — FFT Bands:</b> Split audio into frequency bands and drive multiple zones/animations.</li>
+      <li><b>Stage D — Sculpture:</b> Build your frame, diffuse the LEDs, tidy the harness, safe power.</li>
+    </ol>
+
+    <hr>
+
+    <h2>Power & Safety (read before wiring)</h2>
+    <ul>
+      <li>Size PSU for your LED count (<em>N</em>). Start with 30 mA/LED for planning. Example: 120 LEDs → ~3.6 A supply (use 5 A if you can).</li>
+      <li><b>Always connect grounds:</b> LED 5 V– PSU+, LED GND– PSU−, Teensy GND– PSU− (common ground).</li>
+      <li>Put a <b>1000 µF cap</b> across 5 V and GND at the strip start. Data line: Teensy pin → <b>330 Ω</b> → LED DIN.</li>
+      <li>Use a <b>74HCT-series level shifter</b>. Teensy 4.1 is 3.3 V; many WS2812s work with 3.3 V data at 5 V power, but a shifter is more robust.</li>
+      <li><b>Power injection</b> every 50–100 LEDs to avoid voltage drop. Run extra 5 V/GND feeds to the middle/end of long strips.</li>
+      <li>Never hot-plug the data line before grounds are connected.</li>
+    </ul>
+
+    <pre><code>LED Power Topology (example 120 LEDs, 5V/5A PSU)
+PSU +5V ────┬─────────────── LED +5V (start)
+            ├─────────────── LED +5V (mid injection)
+            └─────────────── LED +5V (end injection)
+PSU GND ────┬─────────────── LED GND (start)
+            ├─────────────── LED GND (mid injection)
+            └─────────────── LED GND (end injection)
+Teensy GND ─┘ (common ground with PSU)
+Teensy data pin ─ 330Ω ─> 74HCT input ─> 74HCT output ─> LED DIN
+1000µF cap across LED +5V/GND at the start of the strip
+</code></pre>
+
+    <hr>
+
+    <h2>Wiring (Audio)</h2>
+    <p><b>Option 1 — Audio Shield (recommended):</b> Plug music into the shield’s <b>Line In</b>. Teensy reads audio via I²S, clean and simple.</p>
+    <p><b>Option 2 — Mic Preamp:</b> Connect an electret mic breakout’s analog output to an ADC pin (e.g., A2) <i>with proper bias/conditioning</i>. Simpler to wire but noisier; FFT still works for a flashy sculpture.</p>
+
+    <hr>
+
+    <h2>Stage A — LED Bring-Up (no audio)</h2>
+    <p><em>Goal: strip lights up with a moving test pattern. Confirm power, data direction, and frame rate.</em></p>
+
+    <pre><code>// ---------- FastLED basic test (Teensy 4.1) ----------
+#include &lt;FastLED.h&gt;
+
+#define LED_PIN   7        // pick a Teensy pin, then level-shift it
+#define NUM_LEDS  120      // set to your actual count
+#define LED_TYPE  WS2812B
+#define COLOR_ORDER GRB
+
+CRGB leds[NUM_LEDS];
+
+void setup() {
+  FastLED.addLeds&lt;LED_TYPE, LED_PIN, COLOR_ORDER&gt;(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
+  FastLED.setBrightness(128); // 0..255
+}
+
+void loop() {
+  // simple rainbow chase
+  static uint8_t hue = 0;
+  for (int i=0; i&lt;NUM_LEDS; ++i) leds[i] = CHSV(hue + i*3, 255, 255);
+  FastLED.show();
+  hue++;
+  delay(16); // ~60 fps
+}
+</code></pre>
+
+    <p><b>Pass:</b> Bright, smooth animation. If flicker/garbage: check arrow direction on strip, level shifter orientation, common ground, and the 330 Ω resistor.</p>
+
+    <hr>
+
+    <h2>Stage B — Audio Level Reactive (no FFT)</h2>
+    <p><em>Goal: LEDs pulse with loudness (VU style). Works with Audio Shield line-in or a mic sensor. This verifies your input path before FFT.</em></p>
+
+    <details><summary><b>Variant 1: Audio Shield (line-in, recommended)</b></summary>
+    <pre><code>// Teensy 4.1 + Audio Shield — LED reacts to input amplitude
+#include &lt;Audio.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;SPI.h&gt;
+#include &lt;FastLED.h&gt;
+
+#define LED_PIN 7
+#define NUM_LEDS 120
+CRGB leds[NUM_LEDS];
+
+// Audio graph
+AudioInputI2S       in1;      // from SGTL5000 line-in
+AudioAnalyzePeak    peakL;
+AudioAnalyzePeak    peakR;
+AudioConnection     pc1(in1, 0, peakL, 0);
+AudioConnection     pc2(in1, 1, peakR, 0);
+AudioControlSGTL5000 sgtl5000_1;
+
+void setup() {
+  // LEDs
+  FastLED.addLeds&lt;WS2812B, LED_PIN, GRB&gt;(leds, NUM_LEDS);
+  FastLED.setBrightness(180);
+
+  // Audio
+  AudioMemory(20);
+  sgtl5000_1.enable();
+  sgtl5000_1.inputSelect(AUDIO_INPUT_LINEIN); // or MIC if wired
+  sgtl5000_1.lineInLevel(5);  // adjust to taste
+
+  // baseline clear
+  fill_solid(leds, NUM_LEDS, CRGB::Black);
+  FastLED.show();
+}
+
+void loop() {
+  if (peakL.available() &amp;&amp; peakR.available()) {
+    float a = (peakL.read() + peakR.read()) * 0.5f; // 0..1-ish
+    a = constrain(a, 0.0f, 1.0f);
+
+    int n = (int)(a * NUM_LEDS);
+    for (int i=0;i&lt;NUM_LEDS;i++) leds[i] = (i&lt;n) ? CRGB(0, 0, 255) : CRGB::Black; // blue VU
+    FastLED.show();
+  }
+}
+</code></pre>
+    </details>
+
+    <details><summary><b>Variant 2: Mic breakout on analog pin (quick hack)</b></summary>
+    <pre><code>// Teensy 4.1 — analog mic VU (basic AC-coupled amplitude)
+#include &lt;FastLED.h&gt;
+#define LED_PIN 7
+#define NUM_LEDS 120
+CRGB leds[NUM_LEDS];
+
+const int MIC_PIN = A2; // your mic analog output
+
+// simple DC removal and peak detection
+float dc = 0, alpha = 0.995f, peak = 0;
+
+void setup(){
+  FastLED.addLeds&lt;WS2812B, LED_PIN, GRB&gt;(leds, NUM_LEDS);
+  FastLED.setBrightness(180);
+}
+
+void loop(){
+  int raw = analogRead(MIC_PIN);        // 0..1023
+  dc = alpha*dc + (1-alpha)*raw;        // running DC estimate
+  float v = fabs(raw - dc);             // AC magnitude
+  peak = max(peak*0.9f, v);             // decay peak
+
+  float a = constrain(peak/200.0f, 0.0f, 1.0f); // normalize to taste
+  int n = (int)(a * NUM_LEDS);
+
+  for (int i=0;i&lt;NUM_LEDS;i++) leds[i] = (i&lt;n) ? CHSV(160 + i, 255, 255) : CRGB::Black;
+  FastLED.show();
+  delay(16);
+}
+</code></pre>
+    </details>
+
+    <p><b>Pass:</b> Strip grows/shrinks with volume. If stuck low, increase line-in level (shield) or adjust the normalization.</p>
+
+    <hr>
+
+    <h2>Stage C — FFT Bands → Animations</h2>
+    <p><em>Goal: split audio into frequency buckets and drive zones/colors accordingly.</em> We’ll use the Teensy Audio Library’s 256-point FFT (covers 0–~22 kHz @ 44.1 kHz sampling). We group bins into 8 bands and assign each band to a segment of the strip.</p>
+
+    <pre><code>// Teensy 4.1 + Audio Shield — 8-band FFT Visualizer (WS2812)
+// Map each band to a segment with brightness based on energy.
+#include &lt;Audio.h&gt;
+#include &lt;Wire.h&gt;
+#include &lt;SPI.h&gt;
+#include &lt;FastLED.h&gt;
+
+#define LED_PIN   7
+#define NUM_LEDS  120
+#define BANDS     8
+CRGB leds[NUM_LEDS];
+
+// Audio
+AudioInputI2S     in1;
+AudioAnalyzeFFT256 fft;
+AudioConnection   pc1(in1, 0, fft, 0);
+AudioControlSGTL5000 sgtl5000_1;
+
+void setup() {
+  // LEDs
+  FastLED.addLeds&lt;WS2812B, LED_PIN, GRB&gt;(leds, NUM_LEDS);
+  FastLED.setBrightness(200);
+
+  // Audio
+  AudioMemory(60);
+  sgtl5000_1.enable();
+  sgtl5000_1.inputSelect(AUDIO_INPUT_LINEIN);
+  sgtl5000_1.lineInLevel(5);
+
+  // FFT config
+  fft.windowFunction(AudioWindowHanning1024); // smoother levels
+}
+
+void drawBands(const float bands[BANDS]) {
+  // Split the strip into BANDS segments
+  int seg = NUM_LEDS / BANDS;
+  for (int b = 0; b &lt; BANDS; ++b) {
+    // normalize band value (tweak scaling)
+    float v = constrain(bands[b] * 3.0f, 0.0f, 1.0f);
+    int lit = (int)(v * seg);
+    for (int i = 0; i &lt; seg; ++i) {
+      int idx = b*seg + i;
+      if (idx &gt;= NUM_LEDS) break;
+      // color per-band (rainbow across bands)
+      CHSV color = CHSV( (uint8_t)(b*32), 255, 255 );
+      leds[idx] = (i &lt; lit) ? color : CRGB::Black;
+    }
+  }
+  FastLED.show();
+}
+
+void loop() {
+  if (fft.available()) {
+    // Read FFT magnitudes (0..1 roughly). Bins 1..127 are useful (0 is DC).
+    // We'll group bins into 8 logarithmic-ish bands.
+    // For 256-pt FFT at 44.1kHz, bin width ~172 Hz. Adjust ranges to taste.
+    const int ranges[BANDS+1] = { 2, 4, 7, 12, 20, 36, 64, 96, 128 }; 
+    float bands[BANDS] = {0};
+
+    for (int b=0; b&lt;BANDS; ++b) {
+      float sum = 0;
+      int count = 0;
+      for (int i=ranges[b]; i&lt;ranges[b+1]; ++i) {
+        sum += fft.read(i); // magnitude 0..1
+        count++;
+      }
+      float avg = (count&gt;0) ? sum / count : 0;
+      // gentle smoothing
+      static float smooth[BANDS] = {0};
+      smooth[b] = 0.7f*smooth[b] + 0.3f*avg;
+      bands[b] = smooth[b];
+    }
+
+    drawBands(bands);
+  }
+}
+</code></pre>
+
+    <p><b>Pass:</b> Low bands respond to bass, higher bands to vocals/hi-hats, each driving its segment. Adjust <code>ranges[]</code>, smoothing, and scaling to match your music and LED count.</p>
+
+    <hr>
+
+    <h2>Modes & Mapping Ideas</h2>
+    <ul>
+      <li><b>Bar Graph:</b> Each band fills its segment (above).</li>
+      <li><b>Energy Wave:</b> Map band energies to a color palette and draw a moving gradient across the whole strip.</li>
+      <li><b>Beat Burst:</b> Detect low-band peaks → spawn expanding rings/sparks.</li>
+      <li><b>Symmetry:</b> Mirror left/right halves from the center for a “totem” look.</li>
+      <li><b>Palette:</b> Use HSV and rotate hue over time for slow color drift.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Build the Sculpture</h2>
+    <ol>
+      <li><b>Design:</b> Pick a form (spiral, helix, zig-zag, grid). Sketch zones that correspond to bands.</li>
+      <li><b>Frame:</b> Bend wire or cut acrylic ribs. Hot-glue/zip-tie the strip in place with arrows (data direction) consistent.</li>
+      <li><b>Diffusion:</b> Add frosted acrylic or parchment paper to soften LEDs into a glow.</li>
+      <li><b>Electronics Bay:</b> Mount Teensy+Shield+level-shifter on perfboard. Provide strain-relief for PSU and audio cables.</li>
+      <li><b>Power Injection:</b> Solder 5 V/GND feeds to middle/end points. Keep grounds star-connected to PSU ground.</li>
+      <li><b>Final Tidy:</b> Heat-shrink exposed joints; label connectors.</li>
+    </ol>
+
+    <hr>
+
+    <h2>Testing & Verification</h2>
+    <ul>
+      <li><b>LED Only:</b> Stage A pattern runs smoothly at desired brightness. No brown-outs (color doesn’t yellow on whites).</li>
+      <li><b>Audio Level:</b> Speaking/clapping near mic or playing music into line-in makes strip pulse responsively.</li>
+      <li><b>FFT Bands:</b> Bass-heavy tracks light low segments; hi-hats/vocals light higher segments.</li>
+      <li><b>Thermals:</b> After 10–15 minutes, wiring and PSU remain cool/warm (not hot). If hot, reduce brightness or improve power injection.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Troubleshooting</h2>
+    <ul>
+      <li><b>No LEDs at all:</b> Check PSU polarity, common ground, DIN direction, 330 Ω resistor, and level shifter orientation.</li>
+      <li><b>Glitchy/flicker:</b> Ensure ground is solid, avoid long data lines (twist with GND), add level shifter, and keep wires short.</li>
+      <li><b>Dim end of strip:</b> Add power injection mid/end; use thicker wire.</li>
+      <li><b>No audio movement (shield):</b> Confirm <code>inputSelect(AUDIO_INPUT_LINEIN)</code>, increase <code>lineInLevel()</code>, ensure audio is on the correct jack.</li>
+      <li><b>No FFT response:</b> Verify <code>AudioMemory()</code> ≥ 60, window function set, and that <code>fft.available()</code> triggers (try louder input).</li>
+      <li><b>Hum/noise (mic):</b> Use shielded cable, keep mic away from PSU wires, add small RC filter if needed.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Extensions</h2>
+    <ul>
+      <li><b>Modes menu:</b> Add buttons or an encoder to switch between visual modes and adjust sensitivity/brightness.</li>
+      <li><b>Preset save:</b> Store settings (brightness, palette, sensitivities) to EEPROM or SD.</li>
+      <li><b>MIDI reactive:</b> Combine FFT with MIDI clock to sync strobe/tempo effects.</li>
+      <li><b>Matrix mapping:</b> If using a matrix, map (x,y) with serpentine wiring and draw 2D effects.</li>
+    </ul>
+
+    <hr>
+
+    <h2>Progress Log</h2>
+    <p>...</p>
+  </main>
+</body>
+</html>
